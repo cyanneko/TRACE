@@ -19,7 +19,10 @@
 8. 用户可以直接新增、修改和删除任意专属记忆。
 9. 联系人可以包含用户自己。
 10. 联系人按字典序展示，会议按时间和状态展示。
-11. 用户可以从 Memory 页面直接新建空联系人或空会议，稍后再补充内容。
+11. 用户可以从 Contacts 或 Meetings 页面直接新建空实体，稍后再补充内容。
+12. 每个会议维护明确的参与人列表，并在会议详情中支持添加和移除联系人。
+13. 点击会议参与人可以直接跳转到对应联系人详情。
+14. 底部导航改成 Meetings、Analyze、Contacts 三栏，Analyze 位于中间并作为主要按钮。
 
 ## 2. 核心设计结论
 
@@ -57,9 +60,9 @@
 
 用户手动编辑 Memory 是例外。手动点击保存本身就是明确确认，因此不需要再生成 Action Card。
 
-### 2.4 Memory 页面允许直接创建空实体
+### 2.4 实体页面允许直接创建空实体
 
-联系人和会议不必只能由截图分析产生。用户可以在 Memory 页的 Contacts 或 Meetings 视图中直接新建实体，并暂时保持为空。
+联系人和会议不必只能由截图分析产生。用户可以在 Contacts 或 Meetings 页面中直接新建实体，并暂时保持为空。
 
 直接新建时：
 
@@ -100,7 +103,7 @@ type ContactRecord = {
 设计规则：
 
 - `displayName` 是创建联系人唯一必填的个人字段。
-- 从 Memory 页面手动创建的 `draft` 联系人允许 `displayName` 暂时为空；Action Card 创建联系人时仍必须有可辨识名称。
+- 从 Contacts 页面手动创建的 `draft` 联系人允许 `displayName` 暂时为空；Action Card 创建联系人时仍必须有可辨识名称。
 - 截图里只有昵称时，昵称可以直接作为 `displayName`。
 - 不允许模型猜测真实姓名、电话、邮箱、公司或职位。
 - `externalContactId` 用于关联 iOS Contacts，`id` 始终使用 TRACE 自己的稳定 ID。
@@ -129,9 +132,22 @@ type MeetingRecord = {
 };
 ```
 
+`participantContactIds` 是会议与联系人之间的正式关联，不把参与人姓名复制成不可追踪的纯文本。会议详情通过这些 ID 读取联系人当前姓名、职位和联系方式，因此联系人更新后，会议中的参与人显示也会同步变化。
+
+参与人管理规则：
+
+- 点击“添加参与人”打开联系人选择器，可以一次选择一个或多个人。
+- 选择器按联系人字典序排列，并排除已经在该会议中的联系人。
+- 选择器允许直接新建一个空联系人草稿，再把它加入当前会议。
+- 点击参与人行进入该联系人的详情页。
+- 点击移除只解除会议与联系人的关联，不删除联系人及其 Memory。
+- 删除联系人时，从所有本地会议中移除该联系人 ID，但不删除会议。
+- self 联系人也可以作为会议参与人。
+- 会议参与人变化属于会议基本信息，不额外复制成自由文本 Memory；变化历史保留在 Action Event。
+
 会议状态不长期写入数据库，而是根据当前时间动态计算，避免 App 放置一段时间后状态过期。
 
-这里的实体 `status` 只表示草稿是否已经形成有效实体，不代表会议进行状态。Memory 页面手动新建的 `draft` 会议允许 `title` 暂时为空；由 Action Card 创建会议时仍需要标题，并在执行条件满足后转为 `active`。
+这里的实体 `status` 只表示草稿是否已经形成有效实体，不代表会议进行状态。Meetings 页面手动新建的 `draft` 会议允许 `title` 暂时为空；由 Action Card 创建会议时仍需要标题，并在执行条件满足后转为 `active`。
 
 ```ts
 type MeetingState = "ongoing" | "upcoming" | "ended" | "time_unresolved";
@@ -424,18 +440,22 @@ Prompt 新增规则：
 
 服务端仍然需要 JSON Schema 校验和一次 Repair。取消 Action 数量上限后，要额外覆盖长输出和 `finish_reason = length`。若一张截图产生的合法行动超过单次输出容量，后续可增加 continuation 请求并按 Action ID 与证据去重。
 
-## 9. Memory 界面调整
+## 9. 导航与实体界面调整
 
-底部仍保持两个主功能：`Analyze` 和 `Memory`。
-
-Memory 页面内部使用联系人和会议两个分段视图：
+底部导航改为固定三栏：
 
 ```text
-Memory
-[ Contacts | Meetings ]
+[ Meetings ]   [ Analyze ]   [ Contacts ]
 ```
 
-两个分段视图分别提供一个新建图标按钮：
+- Meetings 位于左侧，使用次要样式。
+- Analyze 位于中间，使用最醒目的主按钮样式，并作为默认首页。
+- Contacts 位于右侧，使用次要样式。
+- 切换标签时保留 Analyze 当前截图、Review 或 Result 状态。
+- 从会议参与人跳转联系人时，自动切换到 Contacts 并打开目标联系人详情。
+- 实体专属 Memory 不再放进一个单独的总 Memory 标签，而是放在 Meetings 和 Contacts 的详情页中。
+
+Meetings 和 Contacts 顶部分别提供新建图标按钮：
 
 - Contacts 中点击新建，立即保存一个本地空 `draft` 联系人并打开详情页。
 - Meetings 中点击新建，立即保存一个本地空 `draft` 会议并打开详情页。
@@ -471,7 +491,10 @@ Memory
 
 ```text
 基本信息
-名称、时间、时区、地点、链接、参与人
+名称、时间、时区、地点、链接
+
+参与人
+联系人列表、添加、移除、点击进入联系人详情
 
 专属记忆
 新增、编辑、删除
@@ -563,11 +586,13 @@ Insights 只使用：
 - 增加更新会议与 Memory Proposal。
 - 对 DeepSeek、GLM、豆包和 Custom 使用同一 Contract。
 
-### Iteration 5：Memory 页面
+### Iteration 5：三栏导航与实体页面
 
-- 增加 Contacts、Meetings 分段视图。
+- 将底部导航改成 Meetings、Analyze、Contacts，突出中间 Analyze。
+- 增加独立的 Contacts 和 Meetings 列表。
 - 增加联系人与会议详情。
 - 增加直接创建空联系人和空会议的入口与 `draft` 状态。
+- 增加会议参与人的选择、添加、移除和联系人详情跳转。
 - 增加专属 Memory 的新增、编辑、删除。
 - 完成字典序和会议状态视觉。
 
@@ -595,8 +620,13 @@ Insights 只使用：
 13. 进行中会议突出，未来会议正常，历史会议淡化。
 14. 会议跨越开始或结束时间后，状态无需重启 App 即可变化。
 15. Web Demo 与 iOS 使用相同业务规则。
-16. Memory 页可以新建完全为空的联系人和会议，退出详情页后草稿仍存在。
+16. Contacts 和 Meetings 页面可以新建完全为空的实体，退出详情页后草稿仍存在。
 17. 空草稿不创建空白 iOS 联系人或日历事件，也不进入模型分析上下文。
+18. 底部显示 Meetings、Analyze、Contacts 三栏，Analyze 位于中间且视觉权重最高。
+19. 会议详情准确显示当前参与人，并可从联系人选择器添加参与人。
+20. 从会议移除参与人不会删除该联系人或联系人 Memory。
+21. 点击会议参与人会切换到 Contacts 并打开正确的联系人详情。
+22. self 联系人可以被加入会议。
 
 ## 14. 本稿建议优先确认的三个决定
 
