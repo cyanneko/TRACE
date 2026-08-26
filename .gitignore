@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Expo and React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Native build output
+ios/Pods/
+ios/build/
+android/.gradle/
+android/app/build/
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+
+# Test and tooling output
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Logs and local files
+*.log
+.DS_Store
+.idea/
+.vscode/
