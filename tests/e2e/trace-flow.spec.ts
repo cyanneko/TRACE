@@ -25,27 +25,45 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await expect(page.getByText("会前承诺比日历事件更值得跟进")).toBeVisible();
 
   const firstRun = await page.evaluate(() => ({
+    entities: JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}").memories?.length ?? 0,
     events: JSON.parse(localStorage.getItem("trace.demo.action-events.v1") ?? "[]").length,
     memories: JSON.parse(localStorage.getItem("trace.memories.v1") ?? "[]").length,
   }));
-  expect(firstRun).toEqual({ events: 1, memories: 1 });
+  expect(firstRun).toEqual({ entities: 1, events: 1, memories: 1 });
 
   await page.setViewportSize({ width: 390, height: 844 });
   const analyzeTab = page.getByRole("tab", { name: "Analyze" });
-  const memoryTab = page.getByRole("tab", { name: "Memory" });
+  const meetingsTab = page.getByRole("tab", { name: "Meetings" });
+  const contactsTab = page.getByRole("tab", { name: "Contacts" });
   await expect(analyzeTab).toHaveAttribute("aria-selected", "true");
-  await memoryTab.click();
-  await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
-  await expect(page.getByText("1 active", { exact: true })).toBeVisible();
-  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toBeVisible();
-  await expect(page.getByText("Open loop", { exact: true })).toBeVisible();
-  await expect(page.getByText("New", { exact: true })).toBeVisible();
-  await expect(page.getByText("Confirmed action · 2 evidence references · 95% confidence")).toBeVisible();
-  const memoryWidths = await page.evaluate(() => ({
+  await meetingsTab.click();
+  await expect(page.getByText("Timeline", { exact: true })).toBeVisible();
+  await page.getByLabel("Open 与 Maya 的设计评审").first().click();
+  await expect(page.getByText("Participants", { exact: true })).toBeVisible();
+  await page.getByLabel("Remove Maya Chen").click();
+  await expect(page.getByText("No participants.", { exact: true })).toBeVisible();
+  await page.getByLabel("Add participant").click();
+  await page.getByText("Maya Chen", { exact: true }).click();
+  await page.getByLabel("Open Maya Chen").click();
+  await expect(contactsTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Add memory").click();
+  await page.getByPlaceholder("Memory").fill("Prefers concise pre-read notes.");
+  await page.getByLabel("Save memory").click();
+  await expect(page.getByText("Prefers concise pre-read notes.", { exact: true })).toBeVisible();
+  await page.getByLabel("Edit memory").click();
+  await page.getByPlaceholder("Memory").fill("Prefers a concise pre-read before reviews.");
+  await page.getByLabel("Save memory").click();
+  await expect(page.getByText("Prefers a concise pre-read before reviews.", { exact: true })).toBeVisible();
+  await page.getByLabel("Delete memory").click();
+  await expect(page.getByText("Prefers a concise pre-read before reviews.", { exact: true })).toHaveCount(0);
+
+  const entityWidths = await page.evaluate(() => ({
     body: document.body.scrollWidth,
     viewport: window.innerWidth,
   }));
-  expect(memoryWidths.body).toBe(memoryWidths.viewport);
+  expect(entityWidths.body).toBe(entityWidths.viewport);
   await analyzeTab.click();
   await expect(page.getByText("会前承诺比日历事件更值得跟进")).toBeVisible();
 
@@ -59,7 +77,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await uploadScreenshot(page);
   await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
   await expect(page.getByText("1 active memory ready")).toHaveCount(0);
-  await page.getByText("Update", { exact: true }).click();
+  await page.getByText("Contact update", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
   await page.getByRole("button", { name: "Confirm and execute" }).click();
@@ -67,30 +85,42 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
   const secondRun = await page.evaluate(() => {
     const memories = JSON.parse(localStorage.getItem("trace.memories.v1") ?? "[]") as Array<{ status: string }>;
+    const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: unknown[];
+      meetings?: unknown[];
+      memories?: Array<{ status: string }>;
+    };
     return {
       activeMemories: memories.filter((memory) => memory.status === "active").length,
+      contacts: entities.contacts?.length ?? 0,
+      entityMemories: entities.memories?.filter((memory) => memory.status === "active").length ?? 0,
       events: JSON.parse(localStorage.getItem("trace.demo.action-events.v1") ?? "[]").length,
+      meetings: entities.meetings?.length ?? 0,
     };
   });
-  expect(secondRun).toEqual({ activeMemories: 3, events: 2 });
-  await memoryTab.click();
-  await expect(page.getByText("3 active", { exact: true })).toBeVisible();
-  await page.getByLabel("Delete memory 与 Maya 的设计评审").click();
-  await expect(page.getByText("2 active", { exact: true })).toBeVisible();
+  expect(secondRun).toMatchObject({ activeMemories: 3, events: 2 });
+  expect(secondRun.contacts).toBeGreaterThanOrEqual(2);
+  expect(secondRun.meetings).toBeGreaterThanOrEqual(1);
+  expect(secondRun.entityMemories).toBeGreaterThanOrEqual(2);
+  await contactsTab.click();
+  await page.waitForTimeout(300);
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
+  await expect(page.locator('input[value="Head of Product"]')).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
 test("mobile no-action state stays conservative and within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByRole("tab", { name: "Memory" }).click();
-  await expect(page.getByText("No active memories", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Contacts" }).click();
+  await expect(page.getByText("People", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Analyze" }).click();
   await expect(page.getByText("Turn a conversation into clear next steps")).toHaveCount(0);
   await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
   await uploadScreenshot(page);
   await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
-  await page.getByText("No action", { exact: true }).click();
+  await page.getByText("None", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 

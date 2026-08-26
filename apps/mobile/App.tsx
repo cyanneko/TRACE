@@ -2,9 +2,12 @@ import {
   ActionCardSchema,
   type ActionCard,
   type AnalyzeResult,
+  type ContactRecord,
   type ContactSummary,
+  type EntityMemory,
   type FixtureId,
   type MemoryEntry,
+  type MeetingRecord,
   type ProviderInfo,
   type ToolResult,
   type UserVisionProvider,
@@ -20,7 +23,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,19 +41,18 @@ import {
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
 import { ActionCardView } from "./src/components/ActionCardView";
 import { BottomNavigation, type MainTab } from "./src/components/BottomNavigation";
-import { MemoryScreen } from "./src/components/MemoryScreen";
+import { ContactsScreen } from "./src/components/ContactsScreen";
+import { MeetingsScreen } from "./src/components/MeetingsScreen";
 import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
 import { mergeContactContext, mergeMeetingContext } from "./src/entities/analysisContext";
-import { WebEntityRepository } from "./src/entities/webEntityRepository";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
 import { executeAndCommit } from "./src/execution/executeAndCommit";
 import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
 import { deriveMemoryCandidates } from "./src/memory/policy";
-import { WebMemoryRepository } from "./src/memory/webMemoryRepository";
 import { DemoMeetingSource } from "./src/meetings/demoMeetingSource";
 import { createPlatformServices } from "./src/platform/services";
 import { describeUserVisionProvider } from "./src/providerSettings/model";
@@ -97,19 +99,44 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
-  const [memoryLoading, setMemoryLoading] = useState(true);
-  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [entityContacts, setEntityContacts] = useState<ContactRecord[]>([]);
+  const [entityMeetings, setEntityMeetings] = useState<MeetingRecord[]>([]);
+  const [entityMemories, setEntityMemories] = useState<EntityMemory[]>([]);
+  const [entityLoading, setEntityLoading] = useState(true);
+  const [entityError, setEntityError] = useState<string | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
   const platformServices = useMemo(() => createPlatformServices(), []);
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
   const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
   const fixtureMeetingSource = useMemo(() => new DemoMeetingSource(), []);
   const fixtureActionExecutor = useMemo(() => new DemoActionExecutor(), []);
-  const fixtureEntityRepository = useMemo(() => new WebEntityRepository(), []);
-  const fixtureMemoryRepository = useMemo(() => new WebMemoryRepository(), []);
   const actionExecutor = platformServices.executor;
-  const entityRepository = (provider?.fixture ?? true) ? fixtureEntityRepository : platformServices.entities;
-  const memoryRepository = (provider?.fixture ?? true) ? fixtureMemoryRepository : platformServices.memories;
+  const entityRepository = platformServices.entities;
+  const memoryRepository = platformServices.memories;
+
+  const refreshEntities = useCallback(async () => {
+    setEntityLoading(true);
+    setEntityError(null);
+    try {
+      await entityRepository.initialize();
+      const [contacts, meetings, memories] = await Promise.all([
+        entityRepository.listContacts(),
+        entityRepository.listMeetings(),
+        entityRepository.listAllMemories(),
+      ]);
+      setEntityContacts(contacts);
+      setEntityMeetings(meetings);
+      setEntityMemories(memories);
+    } catch (loadError) {
+      setEntityError(
+        loadError instanceof Error ? loadError.message : "Saved contacts and meetings could not be opened.",
+      );
+    } finally {
+      setEntityLoading(false);
+    }
+  }, [entityRepository]);
 
   useEffect(() => {
     let active = true;
@@ -156,8 +183,6 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    setMemoryLoading(true);
-    setMemoryError(null);
     setActiveMemories([]);
 
     void memoryRepository
@@ -169,12 +194,7 @@ export default function App() {
       })
       .catch(() => {
         if (active) {
-          setMemoryError("Saved memories could not be opened.");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setMemoryLoading(false);
+          setError("Saved memories could not be opened.");
         }
       });
 
@@ -182,6 +202,52 @@ export default function App() {
       active = false;
     };
   }, [memoryRepository]);
+
+  useEffect(() => {
+    void refreshEntities();
+  }, [refreshEntities]);
+
+  useEffect(() => {
+    if (activeTab === "analyze") {
+      return;
+    }
+
+    let active = true;
+    const source = platformServices.capabilities.contacts === "native" ? "ios" : "demo";
+    setEntityLoading(true);
+    setEntityError(null);
+
+    void (async () => {
+      try {
+        if (activeTab === "contacts") {
+          const contacts = await platformServices.contacts.list();
+          if (!active) return;
+          await entityRepository.syncContacts(contacts, source);
+        } else {
+          const currentTime = new Date().toISOString();
+          const [contacts, meetings] = await Promise.all([
+            platformServices.contacts.list(),
+            platformServices.meetings.list(currentTime),
+          ]);
+          if (!active) return;
+          await entityRepository.syncContacts(contacts, source);
+          await entityRepository.syncMeetings(meetings, source);
+        }
+        if (active) await refreshEntities();
+      } catch (syncError) {
+        if (active) {
+          setEntityError(
+            syncError instanceof Error ? syncError.message : "Contacts and meetings could not be synchronized.",
+          );
+          setEntityLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab, entityRepository, platformServices, refreshEntities]);
 
   async function chooseScreenshot() {
     setError(null);
@@ -206,21 +272,29 @@ export default function App() {
     try {
       const currentTime = new Date().toISOString();
       const useFixture = provider?.fixture ?? true;
-      const [memories, sourceContacts, localContacts, localMeetings, entityMemories, sourceMeetings] =
-        await Promise.all([
+      const [memories, sourceContacts, sourceMeetings] = await Promise.all([
         memoryRepository.listActive(),
         useFixture ? fixtureContactSource.list() : platformServices.contacts.list(),
+        (useFixture ? fixtureMeetingSource : platformServices.meetings).list(currentTime),
+      ]);
+      const entitySource = useFixture
+        ? "demo"
+        : platformServices.capabilities.contacts === "native"
+          ? "ios"
+          : "demo";
+      await entityRepository.syncContacts(sourceContacts, entitySource);
+      await entityRepository.syncMeetings(sourceMeetings, entitySource);
+      const [localContacts, localMeetings, currentEntityMemories] = await Promise.all([
         entityRepository.listContacts(),
         entityRepository.listMeetings(),
         entityRepository.listAllMemories(),
-        (useFixture ? fixtureMeetingSource : platformServices.meetings).list(currentTime),
       ]);
       const contacts = mergeContactContext(sourceContacts, localContacts);
       const meetings = mergeMeetingContext(sourceMeetings, localMeetings);
       const result = await analyzeScreenshot({
         contacts,
         currentTime,
-        entityMemories,
+        entityMemories: currentEntityMemories,
         fixtureId: provider?.fixture === false ? undefined : fixtureId,
         meetings,
         memories,
@@ -232,6 +306,9 @@ export default function App() {
       setAnalysis(result);
       setAnalysisContacts(contacts);
       setActiveMemories(memories);
+      setEntityContacts(localContacts);
+      setEntityMeetings(localMeetings);
+      setEntityMemories(currentEntityMemories);
       setProvider(result.provider);
       setCards(result.actionCards);
       setSelectedIds(new Set(result.actionCards.map((card) => card.id)));
@@ -332,6 +409,7 @@ export default function App() {
         supersededMemoryIds: merged.supersededMemoryIds,
       });
       setActiveMemories(activeMemories);
+      await refreshEntities();
       setPhase("result");
 
       try {
@@ -369,11 +447,190 @@ export default function App() {
     }
   }
 
-  async function deleteMemory(memoryId: string) {
-    await memoryRepository.delete(memoryId);
-    dispatchExecution({ type: "MEMORY_DELETED", memoryId });
-    const activeMemories = await memoryRepository.listActive();
-    setActiveMemories(activeMemories);
+  function reportEntityError(entityActionError: unknown, fallback: string) {
+    setEntityError(entityActionError instanceof Error ? entityActionError.message : fallback);
+  }
+
+  async function createContact() {
+    setEntityError(null);
+    try {
+      const contact = await entityRepository.createContactDraft();
+      await refreshEntities();
+      setSelectedContactId(contact.id);
+    } catch (createError) {
+      reportEntityError(createError, "The contact could not be created.");
+    }
+  }
+
+  async function saveContact(contact: ContactRecord) {
+    setEntityError(null);
+    try {
+      if (contact.isSelf) {
+        const updatedAt = new Date().toISOString();
+        for (const existing of entityContacts) {
+          if (existing.id !== contact.id && existing.isSelf) {
+            await entityRepository.saveContact({
+              ...existing,
+              isSelf: false,
+              source: "trace",
+              updatedAt,
+            });
+          }
+        }
+      }
+      await entityRepository.saveContact({ ...contact, source: "trace" });
+      await refreshEntities();
+    } catch (saveError) {
+      reportEntityError(saveError, "The contact could not be saved. Check its email and required fields.");
+    }
+  }
+
+  async function deleteContact(contactId: string) {
+    setEntityError(null);
+    try {
+      await entityRepository.deleteContact(contactId);
+      await refreshEntities();
+    } catch (deleteError) {
+      reportEntityError(deleteError, "The contact could not be deleted.");
+    }
+  }
+
+  async function createMeeting() {
+    setEntityError(null);
+    try {
+      const meeting = await entityRepository.createMeetingDraft(timezone());
+      await refreshEntities();
+      setSelectedMeetingId(meeting.id);
+    } catch (createError) {
+      reportEntityError(createError, "The meeting could not be created.");
+    }
+  }
+
+  async function saveMeeting(meeting: MeetingRecord) {
+    setEntityError(null);
+    try {
+      await entityRepository.saveMeeting({
+        ...meeting,
+        participantContactIds: [...new Set(meeting.participantContactIds)],
+        source: "trace",
+      });
+      await refreshEntities();
+    } catch (saveError) {
+      reportEntityError(saveError, "The meeting could not be saved. Check its dates and required fields.");
+    }
+  }
+
+  async function deleteMeeting(meetingId: string) {
+    setEntityError(null);
+    try {
+      await entityRepository.deleteMeeting(meetingId);
+      await refreshEntities();
+    } catch (deleteError) {
+      reportEntityError(deleteError, "The meeting could not be deleted.");
+    }
+  }
+
+  async function addMeetingParticipant(meetingId: string, contactId: string) {
+    setEntityError(null);
+    try {
+      const meeting = await entityRepository.findMeeting(meetingId);
+      const contact = await entityRepository.findContact(contactId);
+      if (!meeting || !contact) throw new Error("The meeting or contact no longer exists.");
+      if (meeting.participantContactIds.includes(contact.id)) return;
+      await entityRepository.saveMeeting({
+        ...meeting,
+        participantContactIds: [...meeting.participantContactIds, contact.id],
+        source: "trace",
+        updatedAt: new Date().toISOString(),
+      });
+      await refreshEntities();
+    } catch (participantError) {
+      reportEntityError(participantError, "The participant could not be added.");
+    }
+  }
+
+  async function removeMeetingParticipant(meetingId: string, contactId: string) {
+    setEntityError(null);
+    try {
+      const meeting = await entityRepository.findMeeting(meetingId);
+      if (!meeting) throw new Error("The meeting no longer exists.");
+      await entityRepository.saveMeeting({
+        ...meeting,
+        participantContactIds: meeting.participantContactIds.filter((id) => id !== contactId),
+        source: "trace",
+        updatedAt: new Date().toISOString(),
+      });
+      await refreshEntities();
+    } catch (participantError) {
+      reportEntityError(participantError, "The participant could not be removed.");
+    }
+  }
+
+  async function createMeetingParticipant(meetingId: string) {
+    setEntityError(null);
+    try {
+      const contact = await entityRepository.createContactDraft();
+      const meeting = await entityRepository.findMeeting(meetingId);
+      if (!meeting) throw new Error("The meeting no longer exists.");
+      await entityRepository.saveMeeting({
+        ...meeting,
+        participantContactIds: [...new Set([...meeting.participantContactIds, contact.id])],
+        source: "trace",
+        updatedAt: new Date().toISOString(),
+      });
+      await refreshEntities();
+      setSelectedContactId(contact.id);
+      setActiveTab("contacts");
+    } catch (participantError) {
+      reportEntityError(participantError, "A new participant could not be created.");
+    }
+  }
+
+  function openContact(contactId: string) {
+    const contact = entityContacts.find(
+      (candidate) => candidate.id === contactId || candidate.externalContactId === contactId,
+    );
+    if (!contact) {
+      setEntityError("This participant is not linked to a saved contact.");
+      return;
+    }
+    setSelectedContactId(contact.id);
+    setActiveTab("contacts");
+  }
+
+  async function addEntityMemory(
+    ownerType: EntityMemory["ownerType"],
+    ownerId: string,
+    kind: EntityMemory["kind"],
+    content: string,
+  ) {
+    setEntityError(null);
+    try {
+      await entityRepository.addMemory({ ownerType, ownerId, kind, content });
+      await refreshEntities();
+    } catch (memoryError) {
+      reportEntityError(memoryError, "The memory could not be added.");
+    }
+  }
+
+  async function updateEntityMemory(memoryId: string, kind: EntityMemory["kind"], content: string) {
+    setEntityError(null);
+    try {
+      await entityRepository.updateMemory(memoryId, { kind, content });
+      await refreshEntities();
+    } catch (memoryError) {
+      reportEntityError(memoryError, "The memory could not be updated.");
+    }
+  }
+
+  async function deleteEntityMemory(memoryId: string) {
+    setEntityError(null);
+    try {
+      await entityRepository.deleteMemory(memoryId);
+      await refreshEntities();
+    } catch (memoryError) {
+      reportEntityError(memoryError, "The memory could not be deleted.");
+    }
   }
 
   function reset() {
@@ -459,13 +716,50 @@ export default function App() {
             serverProvider={serverProvider}
             storage={providerSettingsStorage}
           />
-        ) : activeTab === "memory" ? (
-          <MemoryScreen
-            error={memoryError}
-            loading={memoryLoading}
-            memories={activeMemories}
-            newMemoryIds={execution.writtenMemoryIds}
-            onDeleteMemory={deleteMemory}
+        ) : activeTab === "meetings" ? (
+          <MeetingsScreen
+            contacts={entityContacts}
+            error={entityError}
+            loading={entityLoading}
+            meetings={entityMeetings}
+            memories={entityMemories}
+            onAddMemory={(meetingId, kind, content) =>
+              addEntityMemory("meeting", meetingId, kind, content)
+            }
+            onAddParticipant={addMeetingParticipant}
+            onCreate={createMeeting}
+            onCreateParticipant={createMeetingParticipant}
+            onDelete={deleteMeeting}
+            onDeleteMemory={deleteEntityMemory}
+            onOpenContact={openContact}
+            onRemoveParticipant={removeMeetingParticipant}
+            onSave={saveMeeting}
+            onSelect={(meetingId) => {
+              setEntityError(null);
+              setSelectedMeetingId(meetingId);
+            }}
+            onUpdateMemory={updateEntityMemory}
+            selectedMeetingId={selectedMeetingId}
+          />
+        ) : activeTab === "contacts" ? (
+          <ContactsScreen
+            contacts={entityContacts}
+            error={entityError}
+            loading={entityLoading}
+            memories={entityMemories}
+            onAddMemory={(contactId, kind, content) =>
+              addEntityMemory("contact", contactId, kind, content)
+            }
+            onCreate={createContact}
+            onDelete={deleteContact}
+            onDeleteMemory={deleteEntityMemory}
+            onSave={saveContact}
+            onSelect={(contactId) => {
+              setEntityError(null);
+              setSelectedContactId(contactId);
+            }}
+            onUpdateMemory={updateEntityMemory}
+            selectedContactId={selectedContactId}
           />
         ) : phase === "capture" ? (
           <CaptureScreen
@@ -509,7 +803,8 @@ export default function App() {
       {!settingsOpen ? (
         <BottomNavigation
           activeTab={activeTab}
-          memoryCount={activeMemories.length}
+          contactCount={entityContacts.length}
+          meetingCount={entityMeetings.length}
           onChange={setActiveTab}
         />
       ) : null}

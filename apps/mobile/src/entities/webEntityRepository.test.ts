@@ -230,4 +230,56 @@ describe("WebEntityRepository", () => {
 
     expect((await entities.findMeeting(meeting.id))?.participantContactIds).toEqual([contact.id]);
   });
+
+  it("resolves synchronized meeting participants to stable local contact ids", async () => {
+    const entities = repository(memoryStore());
+    const sourceContact = {
+      id: "native-maya",
+      displayName: "Maya Chen",
+      company: "Northstar",
+      jobTitle: "Head of Product",
+      phones: [],
+      emails: ["maya@example.com"],
+    };
+    const sourceMeeting = {
+      id: "native-review",
+      externalEventId: "native-review",
+      title: "Design review",
+      startAt: "2026-08-27T07:00:00.000Z",
+      endAt: "2026-08-27T07:30:00.000Z",
+      timezone: "Asia/Shanghai",
+      allDay: false,
+      location: "",
+      meetingLink: "",
+      notes: "",
+      participantContactIds: [sourceContact.id],
+    };
+
+    await entities.syncContacts([sourceContact], "ios");
+    await entities.syncMeetings([sourceMeeting], "ios");
+    await entities.syncContacts([{ ...sourceContact, jobTitle: "VP Product" }], "ios");
+
+    const contacts = await entities.listContacts();
+    const meetings = await entities.listMeetings();
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({ externalContactId: sourceContact.id, jobTitle: "VP Product" });
+    expect(meetings).toHaveLength(1);
+    expect(meetings[0]?.participantContactIds).toEqual([contacts[0]?.id]);
+
+    await entities.saveContact({ ...contacts[0]!, jobTitle: "Local role", source: "trace" });
+    await entities.saveMeeting({
+      ...meetings[0]!,
+      participantContactIds: [],
+      source: "trace",
+      title: "Local review title",
+    });
+    await entities.syncContacts([{ ...sourceContact, jobTitle: "External role" }], "ios");
+    await entities.syncMeetings([sourceMeeting], "ios");
+
+    expect((await entities.listContacts())[0]?.jobTitle).toBe("Local role");
+    expect((await entities.listMeetings())[0]).toMatchObject({
+      participantContactIds: [],
+      title: "Local review title",
+    });
+  });
 });

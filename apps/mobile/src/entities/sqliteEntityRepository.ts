@@ -4,9 +4,11 @@ import {
   MemoryEntrySchema,
   MeetingRecordSchema,
   type ContactRecord,
+  type ContactSummary,
   type EntityMemory,
   type MemoryEntry,
   type MeetingRecord,
+  type MeetingSummary,
 } from "@trace/contracts";
 import type { SQLiteDatabase } from "expo-sqlite";
 
@@ -77,6 +79,38 @@ export class SqliteEntityRepository implements EntityRepository {
     return parsed.success ? parsed.data : null;
   }
 
+  async syncContacts(contacts: ContactSummary[], source: "demo" | "ios"): Promise<void> {
+    const database = await this.database();
+    const existingContacts = await this.listContacts();
+    const now = this.factory.now();
+    const synced = contacts.map((summary) => {
+      const existing = existingContacts.find(
+        (contact) => contact.externalContactId === summary.id || contact.id === summary.id,
+      );
+      const preserveExisting = Boolean(existing && (existing.source === "trace" || source === "demo"));
+      const candidate = {
+        id: existing?.id ?? this.factory.createId(),
+        externalContactId: summary.id,
+        displayName: preserveExisting ? existing!.displayName : summary.displayName,
+        sortName: existing?.sortName,
+        company: preserveExisting ? existing!.company : summary.company || undefined,
+        jobTitle: preserveExisting ? existing!.jobTitle : summary.jobTitle || undefined,
+        phones: preserveExisting ? existing!.phones : summary.phones.filter(Boolean),
+        emails: preserveExisting ? existing!.emails : summary.emails.filter(Boolean),
+        isSelf: existing?.isSelf ?? false,
+        status: "active" as const,
+        source: existing?.source ?? source,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: preserveExisting ? existing!.updatedAt : now,
+      };
+      const parsed = ContactRecordSchema.safeParse(candidate);
+      return parsed.success ? parsed.data : ContactRecordSchema.parse({ ...candidate, emails: [] });
+    });
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      for (const contact of synced) await this.writeContact(transaction, contact);
+    });
+  }
+
   async createContactDraft(): Promise<ContactRecord> {
     const contact = createContactDraft(this.factory);
     await this.saveContact(contact);
@@ -128,6 +162,53 @@ export class SqliteEntityRepository implements EntityRepository {
     if (!row) return null;
     const parsed = MeetingRecordSchema.safeParse(JSON.parse(row.payload));
     return parsed.success ? parsed.data : null;
+  }
+
+  async syncMeetings(meetings: MeetingSummary[], source: "demo" | "ios"): Promise<void> {
+    const database = await this.database();
+    const [existingMeetings, existingContacts] = await Promise.all([
+      this.listMeetings(),
+      this.listContacts(),
+    ]);
+    const now = this.factory.now();
+    const synced = meetings.map((summary) => {
+      const externalEventId = summary.externalEventId ?? summary.id;
+      const existing = existingMeetings.find(
+        (meeting) => meeting.externalEventId === externalEventId || meeting.id === summary.id,
+      );
+      const preserveExisting = Boolean(existing && (existing.source === "trace" || source === "demo"));
+      const participantContactIds = [
+        ...new Set(
+          summary.participantContactIds.map((contactId) => {
+            const contact = existingContacts.find(
+              (candidate) =>
+                candidate.id === contactId || candidate.externalContactId === contactId,
+            );
+            return contact?.id ?? contactId;
+          }),
+        ),
+      ];
+      return MeetingRecordSchema.parse({
+        id: existing?.id ?? this.factory.createId(),
+        externalEventId,
+        title: preserveExisting ? existing!.title : summary.title,
+        startAt: preserveExisting ? existing!.startAt : summary.startAt ?? undefined,
+        endAt: preserveExisting ? existing!.endAt : summary.endAt ?? undefined,
+        timezone: preserveExisting ? existing!.timezone : summary.timezone,
+        allDay: preserveExisting ? existing!.allDay : summary.allDay,
+        location: preserveExisting ? existing!.location : summary.location || undefined,
+        meetingLink: preserveExisting ? existing!.meetingLink : summary.meetingLink || undefined,
+        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
+        participantContactIds: preserveExisting ? existing!.participantContactIds : participantContactIds,
+        status: "active",
+        source: existing?.source ?? source,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: preserveExisting ? existing!.updatedAt : now,
+      });
+    });
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      for (const meeting of synced) await this.writeMeeting(transaction, meeting);
+    });
   }
 
   async createMeetingDraft(timezone: string): Promise<MeetingRecord> {

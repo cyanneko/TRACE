@@ -1,4 +1,12 @@
-import type { ActionCard, ContactRecord, EntityMemory, MeetingRecord, ToolResult } from "@trace/contracts";
+import type {
+  ActionCard,
+  ContactRecord,
+  ContactSummary,
+  EntityMemory,
+  MeetingRecord,
+  MeetingSummary,
+  ToolResult,
+} from "@trace/contracts";
 
 import type { EntityCommitRecord } from "./storageModel";
 
@@ -21,12 +29,14 @@ export interface EntityRepository {
 
   listContacts(): Promise<ContactRecord[]>;
   findContact(contactId: string): Promise<ContactRecord | null>;
+  syncContacts(contacts: ContactSummary[], source: "demo" | "ios"): Promise<void>;
   createContactDraft(): Promise<ContactRecord>;
   saveContact(contact: ContactRecord): Promise<void>;
   deleteContact(contactId: string): Promise<void>;
 
   listMeetings(): Promise<MeetingRecord[]>;
   findMeeting(meetingId: string): Promise<MeetingRecord | null>;
+  syncMeetings(meetings: MeetingSummary[], source: "demo" | "ios"): Promise<void>;
   createMeetingDraft(timezone: string): Promise<MeetingRecord>;
   saveMeeting(meeting: MeetingRecord): Promise<void>;
   deleteMeeting(meetingId: string): Promise<void>;

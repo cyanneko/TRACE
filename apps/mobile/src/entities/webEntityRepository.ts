@@ -4,9 +4,11 @@ import {
   MemoryEntrySchema,
   MeetingRecordSchema,
   type ContactRecord,
+  type ContactSummary,
   type EntityMemory,
   type MemoryEntry,
   type MeetingRecord,
+  type MeetingSummary,
 } from "@trace/contracts";
 
 import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
@@ -67,6 +69,38 @@ export class WebEntityRepository implements EntityRepository {
     );
   }
 
+  async syncContacts(contacts: ContactSummary[], source: "demo" | "ios"): Promise<void> {
+    const store = this.read();
+    const now = this.factory.now();
+    for (const summary of contacts) {
+      const index = store.contacts.findIndex(
+        (contact) => contact.externalContactId === summary.id || contact.id === summary.id,
+      );
+      const existing = store.contacts[index];
+      const preserveExisting = Boolean(existing && (existing.source === "trace" || source === "demo"));
+      const candidate = {
+        id: existing?.id ?? this.factory.createId(),
+        externalContactId: summary.id,
+        displayName: preserveExisting ? existing!.displayName : summary.displayName,
+        sortName: existing?.sortName,
+        company: preserveExisting ? existing!.company : summary.company || undefined,
+        jobTitle: preserveExisting ? existing!.jobTitle : summary.jobTitle || undefined,
+        phones: preserveExisting ? existing!.phones : summary.phones.filter(Boolean),
+        emails: preserveExisting ? existing!.emails : summary.emails.filter(Boolean),
+        isSelf: existing?.isSelf ?? false,
+        status: "active" as const,
+        source: existing?.source ?? source,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: preserveExisting ? existing!.updatedAt : now,
+      };
+      const parsed = ContactRecordSchema.safeParse(candidate);
+      const contact = parsed.success ? parsed.data : ContactRecordSchema.parse({ ...candidate, emails: [] });
+      if (index >= 0) store.contacts[index] = contact;
+      else store.contacts.push(contact);
+    }
+    this.write(store);
+  }
+
   async createContactDraft(): Promise<ContactRecord> {
     const contact = createContactDraft(this.factory);
     const store = this.read();
@@ -103,6 +137,50 @@ export class WebEntityRepository implements EntityRepository {
       this.read().meetings.find((meeting) => meeting.id === meetingId || meeting.externalEventId === meetingId) ??
       null
     );
+  }
+
+  async syncMeetings(meetings: MeetingSummary[], source: "demo" | "ios"): Promise<void> {
+    const store = this.read();
+    const now = this.factory.now();
+    for (const summary of meetings) {
+      const externalEventId = summary.externalEventId ?? summary.id;
+      const index = store.meetings.findIndex(
+        (meeting) => meeting.externalEventId === externalEventId || meeting.id === summary.id,
+      );
+      const existing = store.meetings[index];
+      const preserveExisting = Boolean(existing && (existing.source === "trace" || source === "demo"));
+      const participantContactIds = [
+        ...new Set(
+          summary.participantContactIds.map((contactId) => {
+            const contact = store.contacts.find(
+              (candidate) =>
+                candidate.id === contactId || candidate.externalContactId === contactId,
+            );
+            return contact?.id ?? contactId;
+          }),
+        ),
+      ];
+      const meeting = MeetingRecordSchema.parse({
+        id: existing?.id ?? this.factory.createId(),
+        externalEventId,
+        title: preserveExisting ? existing!.title : summary.title,
+        startAt: preserveExisting ? existing!.startAt : summary.startAt ?? undefined,
+        endAt: preserveExisting ? existing!.endAt : summary.endAt ?? undefined,
+        timezone: preserveExisting ? existing!.timezone : summary.timezone,
+        allDay: preserveExisting ? existing!.allDay : summary.allDay,
+        location: preserveExisting ? existing!.location : summary.location || undefined,
+        meetingLink: preserveExisting ? existing!.meetingLink : summary.meetingLink || undefined,
+        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
+        participantContactIds: preserveExisting ? existing!.participantContactIds : participantContactIds,
+        status: "active",
+        source: existing?.source ?? source,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: preserveExisting ? existing!.updatedAt : now,
+      });
+      if (index >= 0) store.meetings[index] = meeting;
+      else store.meetings.push(meeting);
+    }
+    this.write(store);
   }
 
   async createMeetingDraft(timezone: string): Promise<MeetingRecord> {

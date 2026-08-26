@@ -16,7 +16,7 @@
 
 - A user can select a chat screenshot and add optional context.
 - TRACE returns grounded conversation context and editable action cards.
-- The three supported actions are create meeting, create contact, and update contact.
+- The four supported actions are create meeting, update meeting, create contact, and update contact.
 - Confirmation triggers an executor and produces an auditable result.
 - Confirmed facts become structured memory; rejected or failed actions do not.
 - Insights are generated only after confirmation and cite current evidence or active memory.
@@ -360,6 +360,31 @@ npm test
 ```
 
 Commit: `feat(agent): ground analysis in meeting and entity memory`
+
+## Iteration 15 - Meetings, Analyze, and Contacts
+
+Status: completed
+
+- [x] Preserve Iteration 14 as `iteration-14-entity-grounded-analysis` before shipping the new UI.
+- [x] Replace the two-tab navigation with Meetings, primary Analyze, and Contacts tabs.
+- [x] Add alphabetized contact list, local empty drafts, editable details, self-contact support, and deletion.
+- [x] Add time-sorted meeting list with emphasized ongoing meetings and muted ended meetings.
+- [x] Add meeting details, local empty drafts, participant add/remove controls, and contact-detail navigation.
+- [x] Add editable, entity-owned Memory sections to every contact and meeting.
+- [x] Synchronize Demo/iOS summaries into stable local entity IDs without overwriting TRACE-owned edits.
+- [x] Refresh entity state only after confirmed tool execution or explicit user edits.
+- [x] Update Playwright coverage for three-tab navigation, participant changes, contact jumps, and Memory CRUD.
+- [x] Verify desktop and iPhone-width layouts in WSL browsers.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+```
+
+Commit: `feat(memory): add meeting and contact workspaces`
 
 ## Deferred Beyond MVP
 
