@@ -80,19 +80,19 @@ npm run dev:api
 curl http://localhost:8787/health
 ```
 
-Commit: `feat(api): add portable vision analysis providers`
+Commit: `8ff8ae2`
 
 ## Iteration 3 - WSL Web Capture and Review
 
-Status: pending
+Status: completed
 
-- [ ] Build the Capture screen with image selection, preview, and optional note.
-- [ ] Add a Web fixture contact source.
-- [ ] Connect the real and fixture analysis modes.
-- [ ] Build conversation summary, evidence, and uncertainty states.
-- [ ] Build editable/selectable action cards for all three action types.
-- [ ] Add loading, retry, malformed-output, no-action, and empty-input states.
-- [ ] Clearly display Demo mode when fixture data or Web execution is active.
+- [x] Build the Capture screen with image selection, preview, and optional note.
+- [x] Add a Web fixture contact source.
+- [x] Connect the real and fixture analysis modes.
+- [x] Build conversation summary, evidence, and uncertainty states.
+- [x] Build editable/selectable action cards for all three action types.
+- [x] Add loading, retry, malformed-output, no-action, and empty-input states.
+- [x] Clearly display Fixture mode when deterministic analysis is active.
 
 Completion check:
 
@@ -103,7 +103,7 @@ npm run typecheck
 
 Manual check: upload a fixture screenshot and reach review without browser console errors.
 
-Commit: pending
+Commit: `feat(mobile): build WSL capture and review flow`
 
 ## Iteration 4 - Execution, Memory, and Insights
 

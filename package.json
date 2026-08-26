@@ -19,5 +19,8 @@
     "test": "npm run test --workspaces --if-present",
     "check": "npm run typecheck && npm test"
   },
-  "packageManager": "npm@10.9.8"
+  "packageManager": "npm@10.9.8",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
 }
