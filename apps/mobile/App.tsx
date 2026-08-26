@@ -36,8 +36,9 @@ import {
 } from "react-native";
 
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
-import { ActiveMemoryDisclosure } from "./src/components/ActiveMemoryDisclosure";
 import { ActionCardView } from "./src/components/ActionCardView";
+import { BottomNavigation, type MainTab } from "./src/components/BottomNavigation";
+import { MemoryScreen } from "./src/components/MemoryScreen";
 import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
@@ -73,6 +74,7 @@ const reviewImageStyle: ImageStyle = {
 export default function App() {
   const { width } = useWindowDimensions();
   const compact = width < 720;
+  const [activeTab, setActiveTab] = useState<MainTab>("analyze");
   const [phase, setPhase] = useState<Phase>("capture");
   const [screenshot, setScreenshot] = useState<SelectedScreenshot | null>(null);
   const [note, setNote] = useState("");
@@ -91,6 +93,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
+  const [memoryLoading, setMemoryLoading] = useState(true);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
   const platformServices = useMemo(() => createPlatformServices(), []);
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
@@ -144,7 +148,32 @@ export default function App() {
   }, [providerSettingsRepository]);
 
   useEffect(() => {
-    void memoryRepository.listActive().then(setActiveMemories);
+    let active = true;
+    setMemoryLoading(true);
+    setMemoryError(null);
+    setActiveMemories([]);
+
+    void memoryRepository
+      .listActive()
+      .then((memories) => {
+        if (active) {
+          setActiveMemories(memories);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setMemoryError("Saved memories could not be opened.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setMemoryLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [memoryRepository]);
 
   async function chooseScreenshot() {
@@ -403,51 +432,67 @@ export default function App() {
         </View>
       </View>
 
-      {settingsOpen ? (
-        <ProviderSettingsScreen
-          initialSettings={userVisionProvider}
-          onClose={() => setSettingsOpen(false)}
-          onSave={saveProviderSettings}
-          serverProvider={serverProvider}
-          storage={providerSettingsStorage}
-        />
-      ) : phase === "capture" ? (
-        <CaptureScreen
-          busy={busy}
-          activeMemories={activeMemories}
-          chooseScreenshot={chooseScreenshot}
-          error={error}
-          fixtureId={fixtureId}
-          fixtureMode={provider?.fixture ?? true}
-          note={note}
-          onAnalyze={analyze}
-          onFixtureChange={setFixtureId}
-          onNoteChange={setNote}
-          screenshot={screenshot}
-        />
-      ) : phase === "review" && analysis && screenshot ? (
-        <ReviewScreen
-          analysis={analysis}
-          cards={cards}
-          compact={compact}
-          error={error}
-          onBack={reset}
-          onCardChange={updateCard}
-          onCardToggle={toggleCard}
-          onConfirm={() => void confirmSelectedActions()}
-          confirming={execution.status === "running"}
-          executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
-          screenshot={screenshot}
-          selectedIds={selectedIds}
-        />
-      ) : phase === "result" && analysis ? (
-        <ResultScreen
-          analysis={analysis}
-          execution={execution}
-          executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
-          onDeleteMemory={deleteMemory}
-          onNewThread={startNewThread}
-          onRetryInsights={() => void retryInsights()}
+      <View style={styles.mainContent}>
+        {settingsOpen ? (
+          <ProviderSettingsScreen
+            initialSettings={userVisionProvider}
+            onClose={() => setSettingsOpen(false)}
+            onSave={saveProviderSettings}
+            serverProvider={serverProvider}
+            storage={providerSettingsStorage}
+          />
+        ) : activeTab === "memory" ? (
+          <MemoryScreen
+            error={memoryError}
+            loading={memoryLoading}
+            memories={activeMemories}
+            newMemoryIds={execution.writtenMemoryIds}
+            onDeleteMemory={deleteMemory}
+          />
+        ) : phase === "capture" ? (
+          <CaptureScreen
+            busy={busy}
+            chooseScreenshot={chooseScreenshot}
+            error={error}
+            fixtureId={fixtureId}
+            fixtureMode={provider?.fixture ?? true}
+            note={note}
+            onAnalyze={analyze}
+            onFixtureChange={setFixtureId}
+            onNoteChange={setNote}
+            screenshot={screenshot}
+          />
+        ) : phase === "review" && analysis && screenshot ? (
+          <ReviewScreen
+            analysis={analysis}
+            cards={cards}
+            compact={compact}
+            error={error}
+            onBack={reset}
+            onCardChange={updateCard}
+            onCardToggle={toggleCard}
+            onConfirm={() => void confirmSelectedActions()}
+            confirming={execution.status === "running"}
+            executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
+            screenshot={screenshot}
+            selectedIds={selectedIds}
+          />
+        ) : phase === "result" && analysis ? (
+          <ResultScreen
+            analysis={analysis}
+            execution={execution}
+            executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
+            onNewThread={startNewThread}
+            onRetryInsights={() => void retryInsights()}
+          />
+        ) : null}
+      </View>
+
+      {!settingsOpen ? (
+        <BottomNavigation
+          activeTab={activeTab}
+          memoryCount={activeMemories.length}
+          onChange={setActiveTab}
         />
       ) : null}
     </SafeAreaView>
@@ -455,7 +500,6 @@ export default function App() {
 }
 
 type CaptureProps = {
-  activeMemories: MemoryEntry[];
   busy: boolean;
   chooseScreenshot: () => void;
   error: string | null;
@@ -469,7 +513,6 @@ type CaptureProps = {
 };
 
 function CaptureScreen({
-  activeMemories,
   busy,
   chooseScreenshot,
   error,
@@ -527,8 +570,6 @@ function CaptureScreen({
               />
               <Text style={styles.characterCount}>{note.length}/2000</Text>
             </View>
-
-            <ActiveMemoryDisclosure memories={activeMemories} />
 
             {fixtureMode ? (
               <View style={styles.fixtureBand}>
@@ -747,6 +788,10 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: colors.background,
     flex: 1,
+  },
+  mainContent: {
+    flex: 1,
+    minHeight: 0,
   },
   topBar: {
     backgroundColor: colors.surface,

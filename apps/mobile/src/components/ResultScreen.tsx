@@ -7,25 +7,21 @@ import {
   CheckCircle2,
   CircleAlert,
   Copy,
-  Database,
   Lightbulb,
   MessageSquareText,
   RefreshCw,
-  Trash2,
   UserCheck,
 } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { ExecutionState } from "../execution/reducer";
-import { memoryDetail, memoryTitle } from "../memory/presentation";
 import { colors } from "../theme";
 
 type Props = {
   analysis: AnalyzeResult;
   execution: ExecutionState;
   executionMode: "demo" | "native";
-  onDeleteMemory: (memoryId: string) => Promise<void>;
   onNewThread: () => void;
   onRetryInsights: () => void;
 };
@@ -44,7 +40,6 @@ export function ResultScreen({
   analysis,
   execution,
   executionMode,
-  onDeleteMemory,
   onNewThread,
   onRetryInsights,
 }: Props) {
@@ -57,8 +52,6 @@ export function ResultScreen({
     () => new Map(analysis.actionCards.map((action) => [action.id, action])),
     [analysis.actionCards],
   );
-  const writtenIds = new Set(execution.writtenMemoryIds);
-
   async function copyMessage(index: number, message: string) {
     await Clipboard.setStringAsync(message);
     setCopiedInsight(index);
@@ -117,51 +110,6 @@ export function ResultScreen({
               );
             })}
           </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeading}>
-            <View>
-              <Text style={styles.sectionLabel}>Memory</Text>
-              <Text style={styles.sectionTitle}>{execution.activeMemories.length} active facts and open loops</Text>
-            </View>
-            <Database color={colors.blue} size={22} strokeWidth={2} />
-          </View>
-          {execution.activeMemories.length > 0 ? (
-            <View style={styles.memoryList}>
-              {execution.activeMemories.slice(0, 8).map((memory) => (
-                <View key={memory.id} style={styles.memoryRow}>
-                  <View style={styles.memoryCopy}>
-                    <View style={styles.memoryTitleRow}>
-                      <Text numberOfLines={2} style={styles.memoryTitle}>
-                        {memoryTitle(memory)}
-                      </Text>
-                      {writtenIds.has(memory.id) ? <Text style={styles.newMemory}>New</Text> : null}
-                    </View>
-                    <Text style={styles.memoryType}>{memory.type.replaceAll("_", " ")}</Text>
-                    <Text style={styles.memoryDetail}>{memoryDetail(memory)}</Text>
-                  </View>
-                  <Pressable
-                    accessibilityLabel={`Delete memory ${memoryTitle(memory)}`}
-                    hitSlop={8}
-                    onPress={() => void onDeleteMemory(memory.id)}
-                    style={styles.deleteButton}
-                  >
-                    <Trash2 color={colors.textMuted} size={18} strokeWidth={1.9} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyCopy}>No successful action produced a durable memory.</Text>
-          )}
-          {execution.supersededMemoryIds.length > 0 ? (
-            <Text style={styles.auditCopy}>
-              {execution.supersededMemoryIds.length} older memory record(s) were superseded and kept in the audit trail.
-            </Text>
-          ) : null}
         </View>
 
         <View style={styles.divider} />
@@ -416,70 +364,6 @@ const styles = StyleSheet.create({
   divider: {
     backgroundColor: colors.border,
     height: 1,
-  },
-  memoryList: {
-    gap: 8,
-  },
-  memoryRow: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 7,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 13,
-  },
-  memoryCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  memoryTitleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 7,
-  },
-  memoryTitle: {
-    color: colors.text,
-    flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  newMemory: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 9,
-    color: colors.primary,
-    fontSize: 10,
-    fontWeight: "700",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  memoryType: {
-    color: colors.blue,
-    fontSize: 10,
-    fontWeight: "700",
-    marginTop: 4,
-    textTransform: "uppercase",
-  },
-  memoryDetail: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 4,
-  },
-  deleteButton: {
-    alignItems: "center",
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  emptyCopy: {
-    color: colors.textMuted,
-    fontSize: 13,
-  },
-  auditCopy: {
-    color: colors.textMuted,
-    fontSize: 11,
   },
   loadingBand: {
     borderLeftColor: colors.primary,

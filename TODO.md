@@ -247,6 +247,31 @@ npx expo export --platform ios
 
 Commit: `feat(capture): simplify the app entry screen`
 
+## Iteration 10 - Analyze and Memory Tabs
+
+Status: completed
+
+- [x] Preserve Iteration 9 as the remote tag `iteration-9-compact-capture` before editing.
+- [x] Add persistent bottom Analyze and Memory tabs.
+- [x] Preserve the current capture, review, or result state while switching tabs.
+- [x] Move active memory summaries, provenance, confidence, and deletion into a dedicated Memory screen.
+- [x] Show active memory count in the Memory tab and a focused empty state when none exist.
+- [x] Remove duplicate memory UI from Capture and Result screens.
+- [x] Verify tab state, new-memory labels, deletion, and mobile overflow in Playwright.
+- [x] Run the full check and Web/iOS production bundles.
+- [x] Commit and push the iteration to `origin/main`.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(navigation): add analyze and memory tabs`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

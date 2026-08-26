@@ -31,6 +31,24 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   expect(firstRun).toEqual({ events: 1, memories: 1 });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const analyzeTab = page.getByRole("tab", { name: "Analyze" });
+  const memoryTab = page.getByRole("tab", { name: "Memory" });
+  await expect(analyzeTab).toHaveAttribute("aria-selected", "true");
+  await memoryTab.click();
+  await expect(page.getByRole("heading", { name: "Memory" })).toBeVisible();
+  await expect(page.getByText("1 active", { exact: true })).toBeVisible();
+  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toBeVisible();
+  await expect(page.getByText("Open loop", { exact: true })).toBeVisible();
+  await expect(page.getByText("New", { exact: true })).toBeVisible();
+  await expect(page.getByText("Confirmed action · 2 evidence references · 95% confidence")).toBeVisible();
+  const memoryWidths = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    viewport: window.innerWidth,
+  }));
+  expect(memoryWidths.body).toBe(memoryWidths.viewport);
+  await analyzeTab.click();
+  await expect(page.getByText("会前承诺比日历事件更值得跟进")).toBeVisible();
+
   await page.getByText("Analyze another thread", { exact: true }).click();
   await expect(page.getByText("New thread", { exact: true })).toBeVisible();
   await expect(page.getByText("Choose screenshot", { exact: true })).toBeVisible();
@@ -40,24 +58,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await expect(page.getByRole("button", { name: "Analyze thread" })).toHaveCount(0);
   await uploadScreenshot(page);
   await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 active memory ready")).toBeVisible();
-  const memoryDisclosure = page.getByRole("button", { name: "Show 1 active memory" });
-  await expect(memoryDisclosure).toHaveAttribute("aria-expanded", "false");
-  await memoryDisclosure.click();
-  await expect(page.getByRole("button", { name: "Hide 1 active memory" })).toHaveAttribute(
-    "aria-expanded",
-    "true",
-  );
-  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toBeVisible();
-  await expect(page.getByText("Open loop", { exact: true })).toBeVisible();
-  await expect(page.getByText("Confirmed action · 2 evidence references · 95% confidence")).toBeVisible();
-  const expandedWidths = await page.evaluate(() => ({
-    body: document.body.scrollWidth,
-    viewport: window.innerWidth,
-  }));
-  expect(expandedWidths.body).toBe(expandedWidths.viewport);
-  await page.getByRole("button", { name: "Hide 1 active memory" }).click();
-  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("1 active memory ready")).toHaveCount(0);
   await page.getByText("Update", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
@@ -72,12 +73,19 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
     };
   });
   expect(secondRun).toEqual({ activeMemories: 3, events: 2 });
+  await memoryTab.click();
+  await expect(page.getByText("3 active", { exact: true })).toBeVisible();
+  await page.getByLabel("Delete memory 与 Maya 的设计评审").click();
+  await expect(page.getByText("2 active", { exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
 test("mobile no-action state stays conservative and within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await page.getByRole("tab", { name: "Memory" }).click();
+  await expect(page.getByText("No active memories", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Analyze" }).click();
   await expect(page.getByText("Turn a conversation into clear next steps")).toHaveCount(0);
   await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
   await uploadScreenshot(page);
