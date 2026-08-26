@@ -59,18 +59,18 @@ npm run typecheck
 npm test
 ```
 
-Commit: `build: scaffold TRACE workspace and contracts`
+Commit: `4926018`
 
 ## Iteration 2 - Agent Analysis API
 
-Status: pending
+Status: completed
 
-- [ ] Add `ModelProvider` with DeepSeek and fixture implementations.
-- [ ] Accept a screenshot, optional note, compact contact index, memory, and timezone.
-- [ ] Implement `/v1/analyze` with JSON validation and one repair attempt.
-- [ ] Return conversation context, evidence, uncertainties, contact matches, and action cards.
-- [ ] Add meeting, new-contact, update-contact, and no-action fixtures.
-- [ ] Ensure uploaded screenshots are not persisted or logged by the API.
+- [x] Add a provider boundary with fixture, DeepSeek, GLM, Doubao, and custom OpenAI-compatible configurations.
+- [x] Accept a screenshot, optional note, compact contact index, memory, and timezone.
+- [x] Implement `/v1/analyze` with JSON validation and one repair attempt.
+- [x] Return conversation context, evidence, uncertainties, contact matches, and action cards.
+- [x] Add meeting, new-contact, update-contact, and no-action fixtures.
+- [x] Ensure uploaded screenshots are not persisted or logged by the API.
 
 Completion check:
 
@@ -80,7 +80,7 @@ npm run dev:api
 curl http://localhost:8787/health
 ```
 
-Commit: pending
+Commit: `feat(api): add portable vision analysis providers`
 
 ## Iteration 3 - WSL Web Capture and Review
 

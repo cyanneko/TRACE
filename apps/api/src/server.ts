@@ -1,9 +1,23 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 
-export function buildServer() {
+import type { Environment } from "./config.js";
+import { readEnvironment } from "./config.js";
+import { createModelProvider } from "./providers/createProvider.js";
+import type { ModelProvider } from "./providers/modelProvider.js";
+import { registerAnalyzeRoute } from "./routes/analyze.js";
+
+type ServerOptions = {
+  environment?: Environment;
+  provider?: ModelProvider;
+};
+
+export function buildServer(options: ServerOptions = {}) {
+  const environment = options.environment ?? readEnvironment();
+  const provider = options.provider ?? createModelProvider(environment);
   const app = Fastify({
-    logger: process.env.NODE_ENV !== "test",
+    bodyLimit: 16 * 1024 * 1024,
+    logger: environment.NODE_ENV !== "test",
   });
 
   void app.register(cors, {
@@ -11,9 +25,12 @@ export function buildServer() {
   });
 
   app.get("/health", async () => ({
+    modelProvider: provider.info,
     service: "trace-api",
     status: "ok",
   }));
+
+  registerAnalyzeRoute(app, provider);
 
   return app;
 }

@@ -13,7 +13,7 @@ Users upload a chat screenshot and may add a short note. TRACE understands the c
 - Keep the user in control through review, editing, confirmation, and rejection.
 - Maintain structured, traceable memory rather than replaying an unbounded chat history.
 - Generate evidence-backed insights, follow-ups, and suggested next steps after confirmation.
-- Support `deepseek-v4-flash-vision-exp` as the primary test model, with a provider boundary for fallbacks.
+- Support DeepSeek, GLM, Doubao, and custom OpenAI-compatible vision endpoints through one provider boundary.
 
 ## Product Loop
 
@@ -49,7 +49,7 @@ See the planning documents:
 
 - iOS client: Expo React Native + TypeScript
 - Agent/API: Node.js + TypeScript + Zod
-- Model providers: DeepSeek Vision first, OpenAI-compatible fallback
+- Model providers: DeepSeek, GLM, Doubao, fixture, or a custom OpenAI-compatible vision endpoint
 - Data: device-local SQLite for runs, action events, and structured memory
 - iOS builds from WSL: EAS Build, with real-device testing through Expo
 

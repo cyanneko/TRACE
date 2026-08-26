@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
+    "predev": "npm run build --workspace @trace/contracts",
+    "prestart": "npm run build --workspace @trace/contracts",
+    "pretest": "npm run build --workspace @trace/contracts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
@@ -13,7 +16,9 @@
   "dependencies": {
     "@fastify/cors": "11.3.0",
     "@trace/contracts": "*",
+    "dotenv": "17.4.2",
     "fastify": "5.12.1",
+    "openai": "7.5.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -80,13 +80,22 @@ export const ActionCardSchema = z.discriminatedUnion("type", [
   UpdateContactCardSchema,
 ]);
 
-export const ProviderModeSchema = z.enum(["deepseek", "fixture"]);
+export const ProviderInfoSchema = z.object({
+  id: NonEmptyStringSchema,
+  model: NonEmptyStringSchema,
+  fixture: z.boolean(),
+});
 
 export const AnalyzeResultSchema = z.object({
   runId: z.uuid(),
-  provider: ProviderModeSchema,
+  provider: ProviderInfoSchema,
   thread: ThreadContextSchema,
   actionCards: z.array(ActionCardSchema).max(3),
+});
+
+export const AnalyzeModelOutputSchema = AnalyzeResultSchema.omit({
+  provider: true,
+  runId: true,
 });
 
 export const ContactSummarySchema = z.object({
@@ -96,6 +105,21 @@ export const ContactSummarySchema = z.object({
   jobTitle: z.string(),
   phones: z.array(z.string()),
   emails: z.array(z.string()),
+});
+
+export const FixtureIdSchema = z.enum(["meeting", "new-contact", "update-contact", "no-action"]);
+
+export const AnalyzeRequestSchema = z.object({
+  screenshotDataUrl: z
+    .string()
+    .max(12 * 1024 * 1024)
+    .regex(/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/=\r\n]+$/),
+  note: z.string().trim().max(2_000).default(""),
+  contacts: z.array(ContactSummarySchema).max(200).default([]),
+  memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
+  timezone: z.string().trim().min(1).max(100),
+  currentTime: z.iso.datetime(),
+  fixtureId: FixtureIdSchema.optional(),
 });
 
 export const ToolResultSchema = z.object({
@@ -143,9 +167,12 @@ export type CreateContactCard = z.infer<typeof CreateContactCardSchema>;
 export type ContactChange = z.infer<typeof ContactChangeSchema>;
 export type UpdateContactCard = z.infer<typeof UpdateContactCardSchema>;
 export type ActionCard = z.infer<typeof ActionCardSchema>;
-export type ProviderMode = z.infer<typeof ProviderModeSchema>;
+export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>;
+export type AnalyzeModelOutput = z.infer<typeof AnalyzeModelOutputSchema>;
+export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
 export type ContactSummary = z.infer<typeof ContactSummarySchema>;
+export type FixtureId = z.infer<typeof FixtureIdSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
 export type Insight = z.infer<typeof InsightSchema>;
