@@ -198,6 +198,29 @@ npm run build:web
 
 Commit: `fix(provider): harden DeepSeek vision analysis`
 
+## Iteration 8 - Expandable Active Memory Context
+
+Status: completed
+
+- [x] Keep full active memory records available on the capture screen.
+- [x] Add an accessible expand and collapse control to the memory context summary.
+- [x] Show each memory's type, summary, source evidence count, and confidence.
+- [x] Share memory presentation rules with the execution result screen.
+- [x] Add mobile-width browser coverage for expand, collapse, and overflow behavior.
+- [x] Run the full check and Web/iOS production bundles.
+- [x] Commit and push the iteration to `origin/main`.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(memory): add expandable context details`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

@@ -1,4 +1,4 @@
-import type { AnalyzeResult, MemoryEntry } from "@trace/contracts";
+import type { AnalyzeResult } from "@trace/contracts";
 import * as Clipboard from "expo-clipboard";
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import type { ExecutionState } from "../execution/reducer";
+import { memoryDetail, memoryTitle } from "../memory/presentation";
 import { colors } from "../theme";
 
 type Props = {
@@ -28,36 +29,6 @@ type Props = {
   onNewThread: () => void;
   onRetryInsights: () => void;
 };
-
-function memoryValue(memory: MemoryEntry): Record<string, unknown> {
-  return typeof memory.value === "object" && memory.value !== null
-    ? (memory.value as Record<string, unknown>)
-    : { value: memory.value };
-}
-
-function memoryTitle(memory: MemoryEntry): string {
-  const value = memoryValue(memory);
-  if (memory.type === "open_loop") {
-    return String(value.title ?? "Open loop");
-  }
-  if (memory.type === "relationship_fact") {
-    return String(value.displayName ?? "Relationship fact");
-  }
-  return `${String(value.field ?? memory.key).replaceAll("contact:", "")} · ${String(value.value ?? "updated")}`;
-}
-
-function memoryDetail(memory: MemoryEntry): string {
-  const value = memoryValue(memory);
-  if (memory.type === "open_loop") {
-    const due = value.startAt ? `Starts ${String(value.startAt)}` : "Time unresolved";
-    const notes = value.notes ? ` · ${String(value.notes)}` : "";
-    return `${due}${notes}`;
-  }
-  if (memory.type === "relationship_fact") {
-    return [value.company, value.jobTitle, value.notes].filter(Boolean).map(String).join(" · ") || "Contact created";
-  }
-  return value.previousValue ? `Previously ${String(value.previousValue)}` : "Confirmed from this thread";
-}
 
 function actionLabel(type: string): string {
   if (type === "create_meeting") {

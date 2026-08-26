@@ -15,7 +15,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Cpu,
-  Database,
   FileImage,
   ImagePlus,
   RotateCcw,
@@ -39,6 +38,7 @@ import {
 } from "react-native";
 
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
+import { ActiveMemoryDisclosure } from "./src/components/ActiveMemoryDisclosure";
 import { ActionCardView } from "./src/components/ActionCardView";
 import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
@@ -92,7 +92,7 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeMemoryCount, setActiveMemoryCount] = useState(0);
+  const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
   const platformServices = useMemo(() => createPlatformServices(), []);
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
@@ -146,7 +146,7 @@ export default function App() {
   }, [providerSettingsRepository]);
 
   useEffect(() => {
-    void memoryRepository.listActive().then((memories) => setActiveMemoryCount(memories.length));
+    void memoryRepository.listActive().then(setActiveMemories);
   }, [memoryRepository]);
 
   async function chooseScreenshot() {
@@ -186,7 +186,7 @@ export default function App() {
       });
       setAnalysis(result);
       setAnalysisContacts(contacts);
-      setActiveMemoryCount(memories.length);
+      setActiveMemories(memories);
       setProvider(result.provider);
       setCards(result.actionCards);
       setSelectedIds(new Set(result.actionCards.map((card) => card.id)));
@@ -286,7 +286,7 @@ export default function App() {
         writtenMemoryIds: merged.writtenMemoryIds,
         supersededMemoryIds: merged.supersededMemoryIds,
       });
-      setActiveMemoryCount(activeMemories.length);
+      setActiveMemories(activeMemories);
       setPhase("result");
 
       try {
@@ -328,7 +328,7 @@ export default function App() {
     await memoryRepository.delete(memoryId);
     dispatchExecution({ type: "MEMORY_DELETED", memoryId });
     const activeMemories = await memoryRepository.listActive();
-    setActiveMemoryCount(activeMemories.length);
+    setActiveMemories(activeMemories);
   }
 
   function reset() {
@@ -416,7 +416,7 @@ export default function App() {
       ) : phase === "capture" ? (
         <CaptureScreen
           busy={busy}
-          activeMemoryCount={activeMemoryCount}
+          activeMemories={activeMemories}
           chooseScreenshot={chooseScreenshot}
           error={error}
           fixtureId={fixtureId}
@@ -457,7 +457,7 @@ export default function App() {
 }
 
 type CaptureProps = {
-  activeMemoryCount: number;
+  activeMemories: MemoryEntry[];
   busy: boolean;
   chooseScreenshot: () => void;
   error: string | null;
@@ -471,7 +471,7 @@ type CaptureProps = {
 };
 
 function CaptureScreen({
-  activeMemoryCount,
+  activeMemories,
   busy,
   chooseScreenshot,
   error,
@@ -546,17 +546,7 @@ function CaptureScreen({
           <Text style={styles.characterCount}>{note.length}/2000</Text>
         </View>
 
-        {activeMemoryCount > 0 ? (
-          <View style={styles.memoryContext}>
-            <Database color={colors.blue} size={18} strokeWidth={2} />
-            <View style={styles.memoryContextCopy}>
-              <Text style={styles.memoryContextTitle}>
-                {activeMemoryCount} active {activeMemoryCount === 1 ? "memory" : "memories"} ready
-              </Text>
-              <Text style={styles.memoryContextDetail}>Included as context for this thread.</Text>
-            </View>
-          </View>
-        ) : null}
+        <ActiveMemoryDisclosure memories={activeMemories} />
 
         {fixtureMode ? (
           <View style={styles.fixtureBand}>
@@ -994,28 +984,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     color: colors.textMuted,
     fontSize: 10,
-  },
-  memoryContext: {
-    alignItems: "center",
-    borderLeftColor: colors.blue,
-    borderLeftWidth: 3,
-    flexDirection: "row",
-    gap: 10,
-    paddingLeft: 12,
-    paddingVertical: 4,
-  },
-  memoryContextCopy: {
-    flex: 1,
-  },
-  memoryContextTitle: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  memoryContextDetail: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
   },
   fixtureBand: {
     backgroundColor: colors.blueSoft,

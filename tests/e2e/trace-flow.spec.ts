@@ -26,8 +26,26 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   }));
   expect(firstRun).toEqual({ events: 1, memories: 1 });
 
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByText("Analyze another thread", { exact: true }).click();
   await expect(page.getByText("1 active memory ready")).toBeVisible();
+  const memoryDisclosure = page.getByRole("button", { name: "Show 1 active memory" });
+  await expect(memoryDisclosure).toHaveAttribute("aria-expanded", "false");
+  await memoryDisclosure.click();
+  await expect(page.getByRole("button", { name: "Hide 1 active memory" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toBeVisible();
+  await expect(page.getByText("Open loop", { exact: true })).toBeVisible();
+  await expect(page.getByText("Confirmed action · 2 evidence references · 95% confidence")).toBeVisible();
+  const expandedWidths = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    viewport: window.innerWidth,
+  }));
+  expect(expandedWidths.body).toBe(expandedWidths.viewport);
+  await page.getByRole("button", { name: "Hide 1 active memory" }).click();
+  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toHaveCount(0);
   await page.getByText("Update", { exact: true }).click();
   await uploadAndAnalyze(page);
   await page.getByRole("button", { name: "Confirm and execute" }).click();
