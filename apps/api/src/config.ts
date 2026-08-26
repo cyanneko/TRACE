@@ -1,3 +1,4 @@
+import { VISION_PROVIDER_PRESETS, type UserVisionProvider } from "@trace/contracts";
 import { z } from "zod";
 
 const OptionalNonEmptyStringSchema = z.preprocess(
@@ -18,17 +19,28 @@ const OptionalBooleanSchema = z.preprocess((value) => {
   return value;
 }, z.boolean().optional());
 
+const OptionalImageDetailSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.enum(["auto", "high", "low", "none"]).optional(),
+);
+
+const OptionalImageFormatSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.enum(["base64", "data-url"]).optional(),
+);
+
 const EnvironmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
   VISION_API_KEY: OptionalNonEmptyStringSchema,
   VISION_BASE_URL: OptionalNonEmptyStringSchema.pipe(z.url().optional()),
   VISION_CUSTOM_ID: OptionalNonEmptyStringSchema,
-  VISION_IMAGE_DETAIL: z.enum(["auto", "high", "low", "none"]).optional(),
-  VISION_IMAGE_FORMAT: z.enum(["base64", "data-url"]).optional(),
+  VISION_IMAGE_DETAIL: OptionalImageDetailSchema,
+  VISION_IMAGE_FORMAT: OptionalImageFormatSchema,
   VISION_JSON_MODE: OptionalBooleanSchema,
   VISION_MODEL: OptionalNonEmptyStringSchema,
   VISION_PROVIDER: z.enum(["custom", "deepseek", "doubao", "fixture", "glm"]).default("fixture"),
+  VISION_USER_HOST_ALLOWLIST: OptionalNonEmptyStringSchema,
 });
 
 export type Environment = z.infer<typeof EnvironmentSchema>;
@@ -47,58 +59,90 @@ export type VisionProviderConfig = {
   model: string;
 };
 
-type VisionPreset = {
-  baseURL: string;
-  imageDetail?: "auto" | "high" | "low";
-  imageFormat: "base64" | "data-url";
-  jsonMode: boolean;
-  model: string;
+type VisionProviderSelection = {
+  apiKey?: string;
+  baseURL?: string;
+  customId?: string;
+  imageDetail?: "auto" | "high" | "low" | "none";
+  imageFormat?: "base64" | "data-url";
+  jsonMode?: boolean;
+  model?: string;
+  provider: "custom" | "deepseek" | "doubao" | "glm";
 };
 
-const presets: Record<"deepseek" | "doubao" | "glm", VisionPreset> = {
-  deepseek: {
-    baseURL: "https://api.deepseek.com",
-    imageDetail: "high" as const,
-    imageFormat: "data-url" as const,
-    jsonMode: true,
-    model: "deepseek-v4-flash-vision-exp",
-  },
-  doubao: {
-    baseURL: "https://ark.cn-beijing.volces.com/api/v3",
-    imageFormat: "data-url" as const,
-    jsonMode: false,
-    model: "doubao-seed-2-0-lite-260215",
-  },
-  glm: {
-    baseURL: "https://open.bigmodel.cn/api/paas/v4",
-    imageFormat: "base64" as const,
-    jsonMode: false,
-    model: "glm-4.6v-flash",
-  },
-};
+function resolveRemoteVisionProviderConfig(selection: VisionProviderSelection): VisionProviderConfig {
+  const preset = selection.provider === "custom" ? undefined : VISION_PROVIDER_PRESETS[selection.provider];
+  const baseURL = selection.baseURL ?? preset?.baseURL;
+  const model = selection.model ?? preset?.model;
+
+  if (!selection.apiKey || !baseURL || !model) {
+    throw new Error("An API key, base URL, and model are required for a remote provider");
+  }
+
+  const configuredDetail = selection.imageDetail;
+  return {
+    apiKey: selection.apiKey,
+    baseURL,
+    id: selection.provider === "custom" ? (selection.customId ?? "custom") : selection.provider,
+    imageDetail: configuredDetail === "none" ? undefined : (configuredDetail ?? preset?.imageDetail),
+    imageFormat: selection.imageFormat ?? preset?.imageFormat ?? "data-url",
+    jsonMode: selection.jsonMode ?? preset?.jsonMode ?? false,
+    model,
+  };
+}
 
 export function resolveVisionProviderConfig(environment: Environment): VisionProviderConfig {
   if (environment.VISION_PROVIDER === "fixture") {
     throw new Error("Fixture mode does not have a remote vision provider configuration");
   }
 
-  const preset = environment.VISION_PROVIDER === "custom" ? undefined : presets[environment.VISION_PROVIDER];
-  const apiKey = environment.VISION_API_KEY;
-  const baseURL = environment.VISION_BASE_URL ?? preset?.baseURL;
-  const model = environment.VISION_MODEL ?? preset?.model;
+  return resolveRemoteVisionProviderConfig({
+    apiKey: environment.VISION_API_KEY,
+    baseURL: environment.VISION_BASE_URL,
+    customId: environment.VISION_CUSTOM_ID,
+    imageDetail: environment.VISION_IMAGE_DETAIL,
+    imageFormat: environment.VISION_IMAGE_FORMAT,
+    jsonMode: environment.VISION_JSON_MODE,
+    model: environment.VISION_MODEL,
+    provider: environment.VISION_PROVIDER,
+  });
+}
 
-  if (!apiKey || !baseURL || !model) {
-    throw new Error("VISION_API_KEY, VISION_BASE_URL, and VISION_MODEL are required for a remote provider");
+export function resolveUserVisionProviderConfig(settings: UserVisionProvider): VisionProviderConfig {
+  const provider = settings.provider;
+  if (provider === "fixture") {
+    throw new Error("Fixture mode does not have a remote vision provider configuration");
   }
 
-  const configuredDetail = environment.VISION_IMAGE_DETAIL;
-  return {
-    apiKey,
-    baseURL,
-    id: environment.VISION_PROVIDER === "custom" ? (environment.VISION_CUSTOM_ID ?? "custom") : environment.VISION_PROVIDER,
-    imageDetail: configuredDetail === "none" ? undefined : (configuredDetail ?? preset?.imageDetail),
-    imageFormat: environment.VISION_IMAGE_FORMAT ?? preset?.imageFormat ?? "data-url",
-    jsonMode: environment.VISION_JSON_MODE ?? preset?.jsonMode ?? false,
-    model,
-  };
+  return resolveRemoteVisionProviderConfig({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL,
+    customId: settings.customId,
+    imageDetail: settings.imageDetail,
+    imageFormat: settings.imageFormat,
+    jsonMode: settings.jsonMode,
+    model: settings.model,
+    provider,
+  });
+}
+
+export function assertUserVisionProviderAllowed(config: VisionProviderConfig, environment: Environment): void {
+  if (environment.NODE_ENV !== "production") {
+    return;
+  }
+
+  const url = new URL(config.baseURL);
+  const configuredHosts = environment.VISION_USER_HOST_ALLOWLIST?.split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean) ?? [];
+  const allowedHosts = new Set([
+    "api.deepseek.com",
+    "ark.cn-beijing.volces.com",
+    "open.bigmodel.cn",
+    ...configuredHosts,
+  ]);
+
+  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname.toLowerCase())) {
+    throw new Error("This provider endpoint is not allowed by the TRACE deployment");
+  }
 }

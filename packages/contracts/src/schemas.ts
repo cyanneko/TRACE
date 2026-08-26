@@ -86,6 +86,58 @@ export const ProviderInfoSchema = z.object({
   fixture: z.boolean(),
 });
 
+export const VisionProviderIdSchema = z.enum(["fixture", "deepseek", "glm", "doubao", "custom"]);
+export const VisionImageDetailSchema = z.enum(["auto", "high", "low", "none"]);
+export const VisionImageFormatSchema = z.enum(["data-url", "base64"]);
+
+const OptionalProviderStringSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().trim().min(1).max(8_192).optional(),
+);
+
+const OptionalProviderUrlSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.url().max(2_048).optional(),
+);
+
+export const UserVisionProviderSchema = z
+  .object({
+    provider: VisionProviderIdSchema,
+    apiKey: OptionalProviderStringSchema,
+    baseURL: OptionalProviderUrlSchema,
+    customId: OptionalProviderStringSchema,
+    imageDetail: VisionImageDetailSchema.optional(),
+    imageFormat: VisionImageFormatSchema.optional(),
+    jsonMode: z.boolean().optional(),
+    model: OptionalProviderStringSchema,
+  })
+  .superRefine((settings, context) => {
+    if (settings.provider !== "fixture" && !settings.apiKey) {
+      context.addIssue({
+        code: "custom",
+        message: "An API key is required for a remote vision provider.",
+        path: ["apiKey"],
+      });
+    }
+
+    if (settings.provider === "custom") {
+      if (!settings.baseURL) {
+        context.addIssue({
+          code: "custom",
+          message: "A base URL is required for a custom provider.",
+          path: ["baseURL"],
+        });
+      }
+      if (!settings.model) {
+        context.addIssue({
+          code: "custom",
+          message: "A model is required for a custom provider.",
+          path: ["model"],
+        });
+      }
+    }
+  });
+
 export const AnalyzeResultSchema = z.object({
   runId: z.uuid(),
   provider: ProviderInfoSchema,
@@ -120,6 +172,7 @@ export const AnalyzeRequestSchema = z.object({
   timezone: z.string().trim().min(1).max(100),
   currentTime: z.iso.datetime(),
   fixtureId: FixtureIdSchema.optional(),
+  visionProvider: UserVisionProviderSchema.optional(),
 });
 
 export const ToolResultSchema = z.object({
@@ -209,6 +262,10 @@ export type ContactChange = z.infer<typeof ContactChangeSchema>;
 export type UpdateContactCard = z.infer<typeof UpdateContactCardSchema>;
 export type ActionCard = z.infer<typeof ActionCardSchema>;
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
+export type VisionProviderId = z.infer<typeof VisionProviderIdSchema>;
+export type VisionImageDetail = z.infer<typeof VisionImageDetailSchema>;
+export type VisionImageFormat = z.infer<typeof VisionImageFormatSchema>;
+export type UserVisionProvider = z.infer<typeof UserVisionProviderSchema>;
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>;
 export type AnalyzeModelOutput = z.infer<typeof AnalyzeModelOutputSchema>;
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;

@@ -18,7 +18,15 @@ export function buildServer(options: ServerOptions = {}) {
   const provider = options.provider ?? createModelProvider(environment);
   const app = Fastify({
     bodyLimit: 16 * 1024 * 1024,
-    logger: environment.NODE_ENV !== "test",
+    logger:
+      environment.NODE_ENV === "test"
+        ? false
+        : {
+            redact: {
+              censor: "[Redacted]",
+              paths: ["req.body.visionProvider.apiKey"],
+            },
+          },
   });
 
   void app.register(cors, {
@@ -31,7 +39,7 @@ export function buildServer(options: ServerOptions = {}) {
     status: "ok",
   }));
 
-  registerAnalyzeRoute(app, provider);
+  registerAnalyzeRoute(app, provider, environment);
   registerInsightsRoute(app);
 
   return app;

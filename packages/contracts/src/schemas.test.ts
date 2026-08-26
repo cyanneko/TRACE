@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ActionCardSchema, InsightBundleSchema, InsightRequestSchema } from "./schemas";
+import { ActionCardSchema, InsightBundleSchema, InsightRequestSchema, UserVisionProviderSchema } from "./schemas";
 
 describe("ActionCardSchema", () => {
   it("accepts a grounded meeting proposal", () => {
@@ -99,5 +99,31 @@ describe("InsightRequestSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe("UserVisionProviderSchema", () => {
+  it("accepts a preset provider without endpoint duplication", () => {
+    const result = UserVisionProviderSchema.safeParse({
+      provider: "glm",
+      apiKey: "test-key",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("requires endpoint and model details for a custom provider", () => {
+    const result = UserVisionProviderSchema.safeParse({
+      provider: "custom",
+      apiKey: "test-key",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("allows fixture mode without a key", () => {
+    const result = UserVisionProviderSchema.safeParse({ provider: "fixture" });
+
+    expect(result.success).toBe(true);
   });
 });

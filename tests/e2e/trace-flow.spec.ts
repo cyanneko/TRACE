@@ -55,3 +55,31 @@ test("mobile no-action state stays conservative and within the viewport", async 
   const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
   expect(widths.body).toBe(widths.viewport);
 });
+
+test("provider settings persist locally and can be cleared", async ({ page }) => {
+  const localKey = "e2e-local-only-key";
+
+  await page.goto("/");
+  await page.getByLabel("Provider settings").click();
+  await page.getByLabel("Use DeepSeek").click();
+  await page.getByLabel("Vision provider API key").fill(localKey);
+  await page.getByLabel("Vision model").fill("deepseek-test-vision");
+  await page.getByRole("button", { name: "Save provider" }).click();
+
+  await expect(page.getByText("deepseek · deepseek-test-vision")).toBeVisible();
+  const storedValues = await page.evaluate(() => ({
+    local: JSON.stringify(localStorage),
+    session: JSON.stringify(sessionStorage),
+  }));
+  expect(storedValues.local).toContain(localKey);
+  expect(storedValues.session).not.toContain(localKey);
+
+  await page.reload();
+  await expect(page.getByText("deepseek · deepseek-test-vision")).toBeVisible();
+  await page.getByLabel("Provider settings").click();
+  await page.getByLabel("Use Local default").click();
+  await page.getByRole("button", { name: "Save provider" }).click();
+  await expect(page.getByText("fixture · trace-analyze-fixtures")).toBeVisible();
+  const clearedStorage = await page.evaluate(() => JSON.stringify(localStorage));
+  expect(clearedStorage).not.toContain(localKey);
+});

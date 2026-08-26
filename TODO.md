@@ -7,7 +7,7 @@
 - Keep the main user loop runnable after every iteration.
 - Make one focused commit per iteration and push it to `origin/main` immediately.
 - Do not execute contacts, calendar, or memory writes before explicit confirmation.
-- Keep DeepSeek keys and all server secrets outside the mobile bundle.
+- Never commit or bundle provider keys; BYOK values may exist only at runtime.
 - Use fixture mode for deterministic tests; never silently present fixture output as a real model result.
 - Preserve unrelated local changes. In particular, the current local edit to `docs/IMPLEMENTATION_DRAFT.md` is outside these iterations.
 
@@ -153,6 +153,28 @@ npm run build:web
 Manual check: complete the demo twice from a clean browser profile using the README only.
 
 Commit: `feat(ios): add native adapters and delivery handoff`
+
+## Iteration 6 - Open BYOK Provider Settings
+
+Status: completed
+
+- [x] Add in-app selection for local default, Fixture, DeepSeek, GLM, Doubao, and Custom.
+- [x] Expose model, base URL, image payload, image detail, and JSON compatibility controls.
+- [x] Persist BYOK settings only on the current device: browser localStorage on Web and iOS Keychain on native.
+- [x] Attach provider configuration per analysis request without changing shared server state.
+- [x] Redact provider credentials from API logging paths and never return them in responses.
+- [x] Restrict custom production relay hosts while leaving local open-source development configurable.
+- [x] Verify settings and the existing agent loop in desktop and iPhone-sized browsers.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+```
+
+Commit: `feat(settings): add local BYOK vision providers`
 
 ## Deferred Beyond MVP
 

@@ -33,7 +33,7 @@ The model can propose actions, but it cannot execute them. Only validated cards 
 ## Repository
 
 ```text
-apps/api                  Fastify inference and insight service
+apps/api                  Stateless localhost inference adapter for WSL Web
 apps/mobile               Expo React Native application
 packages/contracts        Shared Zod request, action, memory, and insight schemas
 tests/e2e                 Playwright browser acceptance tests
@@ -74,15 +74,23 @@ Fixture mode does not inspect the uploaded pixels. It exists for deterministic p
 
 ## Vision Providers
 
-Provider credentials stay in the API process. Never put a model API key in an `EXPO_PUBLIC_*` variable or the mobile bundle.
+TRACE uses an open-source BYOK model. Open the settings icon in the app, choose DeepSeek, GLM, Doubao, Fixture, or Custom, then enter the provider key and compatibility options. The selection belongs only to the running app:
 
-Create a local API environment file:
+- Web saves the key in that browser profile's localStorage; iOS saves it in the device Keychain.
+- TRACE never writes BYOK settings to its API process, SQLite memory, source files, or a cloud account.
+- Selecting `Local default` and saving removes the stored provider key.
+- Each analysis request carries its own provider configuration, so one user cannot change another user's model.
+- The key and screenshot are sent to the selected model vendor during analysis. Review that vendor's data policy before using real conversations.
+
+WSL Web sends the request through the stateless localhost adapter on port `8787` because arbitrary vendor endpoints may not accept browser-origin requests. This is a local development compatibility process, not a hosted account or configuration service. Do not save a real key in a shared browser profile.
+
+The local adapter can also have an optional environment fallback for headless tests:
 
 ```bash
 cp .env.example apps/api/.env
 ```
 
-Then set one provider:
+Then set one default provider:
 
 | `VISION_PROVIDER` | Default base URL | Default model | Image payload |
 | --- | --- | --- | --- |
@@ -115,11 +123,12 @@ Compatibility controls:
 - `VISION_IMAGE_FORMAT`: `data-url` or `base64`.
 - `VISION_IMAGE_DETAIL`: `auto`, `high`, `low`, or `none`.
 - `VISION_JSON_MODE`: enable only when the endpoint supports OpenAI JSON response format.
-- The API validates every response against shared contracts and makes one schema-repair attempt.
+- The adapter validates every response against shared contracts and makes one schema-repair attempt.
+- In a public production relay, built-in vendor hosts are allowed by default; add vetted custom hosts with `VISION_USER_HOST_ALLOWLIST`.
 
 Model names and vendor behavior can change. Override the preset when testing a newer GLM, Doubao, DeepSeek, or another OpenAI-compatible vision endpoint.
 
-## API
+## Local Adapter
 
 The service listens on `0.0.0.0:8787` by default.
 
@@ -129,11 +138,11 @@ POST /v1/analyze
 POST /v1/insights
 ```
 
-`/v1/analyze` receives a screenshot data URL, optional note, compact contact index, active memory, timezone, and current time. It returns thread context, evidence, uncertainty, and up to three proposed actions.
+`/v1/analyze` receives a screenshot data URL, optional note, compact contact index, active memory, timezone, current time, and an optional per-request BYOK provider configuration. It never returns the key. It returns thread context, evidence, uncertainty, and up to three proposed actions.
 
 `/v1/insights` is called only after confirmation and execution. It receives confirmed actions, tool results, current evidence, and active memory. Failed actions do not become memory or factual insights.
 
-For a production-like process:
+For a standalone local process:
 
 ```bash
 npm run build --workspace @trace/contracts

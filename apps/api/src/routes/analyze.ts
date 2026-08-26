@@ -4,9 +4,11 @@ import { AnalyzeRequestSchema, AnalyzeResultSchema } from "@trace/contracts";
 import type { FastifyInstance } from "fastify";
 
 import type { ModelProvider } from "../providers/modelProvider.js";
+import type { Environment } from "../config.js";
+import { createUserModelProvider } from "../providers/createProvider.js";
 import { ModelOutputError } from "../providers/parseModelOutput.js";
 
-export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvider) {
+export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvider, environment: Environment) {
   app.post("/v1/analyze", async (request, reply) => {
     const parsedInput = AnalyzeRequestSchema.safeParse(request.body);
     if (!parsedInput.success) {
@@ -20,10 +22,12 @@ export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvid
     }
 
     try {
-      const output = await provider.analyze(parsedInput.data);
+      const { visionProvider, ...analyzeInput } = parsedInput.data;
+      const requestProvider = visionProvider ? createUserModelProvider(visionProvider, environment) : provider;
+      const output = await requestProvider.analyze(analyzeInput);
       return AnalyzeResultSchema.parse({
         ...output,
-        provider: provider.info,
+        provider: requestProvider.info,
         runId: randomUUID(),
       });
     } catch (error) {

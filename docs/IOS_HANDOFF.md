@@ -8,10 +8,13 @@
 | `ActionExecutor` | idempotent local demo events | Contacts patch/create and Calendar create |
 | `MemoryRepository` | localStorage | `expo-sqlite` in `trace.db` |
 | Screenshot picker | `expo-image-picker` Web input | iOS photo picker |
+| Provider setting | local browser profile | iOS Keychain |
 
 Metro resolves `src/platform/services.ts` on Web and `src/platform/services.native.ts` on iOS. Shared action, execution, memory, and insight contracts do not change by platform.
 
 Fixture analysis is deliberately pinned to demo contacts, memory, and execution on every platform. This prevents deterministic IDs and sample data from reaching a real address book, calendar, or SQLite memory. Configure a non-fixture vision provider before native-write acceptance testing.
+
+Provider keys are BYOK local input. Web stores them in that browser profile and iOS stores them in the device Keychain; TRACE does not sync them or persist them in SQLite, source files, or server-side state. Selecting `Local default` clears the saved provider key. The current WSL Web build uses the stateless localhost adapter for browser compatibility; this does not represent a hosted TRACE account service.
 
 ## WSL Reality
 
@@ -40,6 +43,9 @@ Use this sequence:
 - Force-close and relaunch; verify active memory remains in SQLite.
 - Delete memory and verify it disappears from active context while remaining as a deleted audit row.
 - Run a second thread for the same contact and verify the previous open loop appears in insights.
+- Configure each built-in provider from Settings and verify relaunch restores it from Keychain.
+- Select `Local default`, save, and verify the previous key is removed.
+- Confirm a provider error never exposes the key in the UI or development logs.
 
 ## Permissions
 
@@ -62,7 +68,7 @@ Physical-device signing generally requires an Apple Developer account and device
 Before TestFlight or App Store submission:
 
 - Complete the physical-device checklist above.
-- Add authentication, rate limits, restricted CORS, and production HTTPS to the API.
+- If publishing a shared relay, add authentication, rate limits, restricted CORS, HTTPS, and an explicit custom-provider host allowlist.
 - Add user-facing privacy policy, retention language, and account/data deletion behavior.
 - Replace raw ISO meeting inputs with native date/time controls.
 - Add crash reporting without screenshot/contact payload capture.

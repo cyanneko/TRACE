@@ -66,6 +66,29 @@ describe("POST /v1/analyze", () => {
     expect(response.json().actionCards).toEqual([]);
   });
 
+  it("uses a user-selected fixture without returning supplied credentials", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        screenshotDataUrl: onePixelPng,
+        contacts: [],
+        memories: [],
+        timezone: "Asia/Shanghai",
+        currentTime: "2026-08-26T03:30:00.000Z",
+        fixtureId: "meeting",
+        visionProvider: {
+          provider: "fixture",
+          apiKey: "must-not-leak",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().provider).toMatchObject({ fixture: true, id: "fixture" });
+    expect(response.body).not.toContain("must-not-leak");
+  });
+
   it("rejects unsupported screenshot content", async () => {
     const response = await createServer().inject({
       method: "POST",

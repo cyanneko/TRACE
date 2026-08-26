@@ -7,21 +7,23 @@ import {
   type MemoryEntry,
   type ProviderInfo,
   type ToolResult,
+  type UserVisionProvider,
 } from "@trace/contracts";
 import { StatusBar } from "expo-status-bar";
 import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
+  Cpu,
   Database,
   FileImage,
   ImagePlus,
   RotateCcw,
-  Server,
+  Settings,
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,6 +40,7 @@ import {
 
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
 import { ActionCardView } from "./src/components/ActionCardView";
+import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
@@ -47,6 +50,11 @@ import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreensho
 import { deriveMemoryCandidates } from "./src/memory/policy";
 import { WebMemoryRepository } from "./src/memory/webMemoryRepository";
 import { createPlatformServices } from "./src/platform/services";
+import { describeUserVisionProvider } from "./src/providerSettings/model";
+import {
+  createProviderSettingsRepository,
+  providerSettingsStorage,
+} from "./src/providerSettings/repository";
 import { colors } from "./src/theme";
 
 type Phase = "capture" | "review" | "result";
@@ -72,6 +80,11 @@ export default function App() {
   const [note, setNote] = useState("");
   const [fixtureId, setFixtureId] = useState<FixtureId>("meeting");
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
+  const [serverProvider, setServerProvider] = useState<ProviderInfo | null>(null);
+  const [userVisionProvider, setUserVisionProvider] = useState<UserVisionProvider | null>(null);
+  const userVisionProviderRef = useRef<UserVisionProvider | null>(null);
+  const settingsRevisionRef = useRef(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [healthError, setHealthError] = useState(false);
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
   const [analysisContacts, setAnalysisContacts] = useState<ContactSummary[]>([]);
@@ -82,6 +95,7 @@ export default function App() {
   const [activeMemoryCount, setActiveMemoryCount] = useState(0);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
   const platformServices = useMemo(() => createPlatformServices(), []);
+  const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
   const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
   const fixtureActionExecutor = useMemo(() => new DemoActionExecutor(), []);
   const fixtureMemoryRepository = useMemo(() => new WebMemoryRepository(), []);
@@ -90,11 +104,33 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    const settingsRevision = settingsRevisionRef.current;
 
-    getHealth()
+    void providerSettingsRepository
+      .load()
+      .then((settings) => {
+        if (settingsRevisionRef.current !== settingsRevision) {
+          return;
+        }
+        userVisionProviderRef.current = settings;
+        if (active) {
+          setUserVisionProvider(settings);
+          if (settings) {
+            setProvider(describeUserVisionProvider(settings, null));
+          }
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setError("Saved provider settings could not be opened.");
+        }
+      });
+
+    void getHealth()
       .then((health) => {
         if (active) {
-          setProvider(health.modelProvider);
+          setServerProvider(health.modelProvider);
+          setProvider(describeUserVisionProvider(userVisionProviderRef.current, health.modelProvider));
           setHealthError(false);
         }
       })
@@ -107,7 +143,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [providerSettingsRepository]);
 
   useEffect(() => {
     void memoryRepository.listActive().then((memories) => setActiveMemoryCount(memories.length));
@@ -146,6 +182,7 @@ export default function App() {
         note,
         screenshotDataUrl: screenshot.dataUrl,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        visionProvider: userVisionProvider ?? undefined,
       });
       setAnalysis(result);
       setAnalysisContacts(contacts);
@@ -310,6 +347,20 @@ export default function App() {
     setNote("");
   }
 
+  async function saveProviderSettings(settings: UserVisionProvider | null) {
+    settingsRevisionRef.current += 1;
+    if (settings) {
+      await providerSettingsRepository.save(settings);
+    } else {
+      await providerSettingsRepository.clear();
+    }
+    userVisionProviderRef.current = settings;
+    setUserVisionProvider(settings);
+    setProvider(describeUserVisionProvider(settings, serverProvider));
+    reset();
+    setSettingsOpen(false);
+  }
+
   const providerLabel = provider ? `${provider.id} · ${provider.model}` : "Checking API";
 
   return (
@@ -326,19 +377,43 @@ export default function App() {
               {!compact ? <Text style={styles.brandSubline}>Thread intelligence</Text> : null}
             </View>
           </View>
-          <View style={[styles.providerStatus, healthError && styles.providerStatusError]}>
-            <Server color={healthError ? colors.danger : colors.primary} size={14} strokeWidth={2.2} />
-            <Text
-              numberOfLines={1}
-              style={[styles.providerStatusText, healthError && styles.providerStatusTextError]}
+          <View style={styles.topBarActions}>
+            <View
+              style={[
+                styles.providerStatus,
+                compact && styles.providerStatusCompact,
+                healthError && styles.providerStatusError,
+              ]}
             >
-              {healthError ? "API offline" : providerLabel}
-            </Text>
+              <Cpu color={healthError ? colors.danger : colors.primary} size={14} strokeWidth={2.2} />
+              <Text
+                numberOfLines={1}
+                style={[styles.providerStatusText, healthError && styles.providerStatusTextError]}
+              >
+                {healthError ? "Analyzer offline" : providerLabel}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="Provider settings"
+              hitSlop={6}
+              onPress={() => setSettingsOpen(true)}
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
+            >
+              <Settings color={colors.text} size={19} strokeWidth={2} />
+            </Pressable>
           </View>
         </View>
       </View>
 
-      {phase === "capture" ? (
+      {settingsOpen ? (
+        <ProviderSettingsScreen
+          initialSettings={userVisionProvider}
+          onClose={() => setSettingsOpen(false)}
+          onSave={saveProviderSettings}
+          serverProvider={serverProvider}
+          storage={providerSettingsStorage}
+        />
+      ) : phase === "capture" ? (
         <CaptureScreen
           busy={busy}
           activeMemoryCount={activeMemoryCount}
@@ -755,6 +830,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
+  providerStatusCompact: {
+    maxWidth: 148,
+  },
   providerStatusError: {
     backgroundColor: colors.dangerSoft,
   },
@@ -766,6 +844,27 @@ const styles = StyleSheet.create({
   },
   providerStatusTextError: {
     color: colors.danger,
+  },
+  topBarActions: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-end",
+    minWidth: 0,
+  },
+  settingsButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  settingsButtonPressed: {
+    backgroundColor: colors.surfaceMuted,
   },
   captureScroll: {
     alignItems: "center",

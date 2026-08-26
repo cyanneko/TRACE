@@ -12,6 +12,9 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.cyanneko.trace",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "supportsTablet": false
     },
     "android": {
@@ -49,7 +52,8 @@
           "writeOnlyCalendarPermission": "Allow TRACE to add only the meetings you explicitly confirm."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ]
   }
 }
