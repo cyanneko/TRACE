@@ -19,6 +19,7 @@
 8. 用户可以直接新增、修改和删除任意专属记忆。
 9. 联系人可以包含用户自己。
 10. 联系人按字典序展示，会议按时间和状态展示。
+11. 用户可以从 Memory 页面直接新建空联系人或空会议，稍后再补充内容。
 
 ## 2. 核心设计结论
 
@@ -56,6 +57,22 @@
 
 用户手动编辑 Memory 是例外。手动点击保存本身就是明确确认，因此不需要再生成 Action Card。
 
+### 2.4 Memory 页面允许直接创建空实体
+
+联系人和会议不必只能由截图分析产生。用户可以在 Memory 页的 Contacts 或 Meetings 视图中直接新建实体，并暂时保持为空。
+
+直接新建时：
+
+- 只创建本地 `draft` 实体，不生成 Action Card，不调用模型。
+- 不立即向 iOS Contacts 或 Calendar 写入空白记录。
+- 联系人的姓名、联系方式、公司和职位可以全部为空。
+- 会议的名称、时间、地点、参与人和备注可以全部为空。
+- 初始专属 Memory 列表为空，不创建内容为空的 Memory 行。
+- 用户可以随后补充基本信息或新增专属 Memory。
+- 空草稿不加入视觉模型上下文，避免无意义实体干扰匹配。
+
+列表中使用“未命名联系人”和“未命名会议”作为显示占位文字，但占位文字不写入实体数据。空联系人排在有名称联系人之后，空会议进入 `time_unresolved` 分组。
+
 ## 3. 目标数据模型
 
 ### 3.1 联系人实体
@@ -73,6 +90,7 @@ type ContactRecord = {
   phones: string[];
   emails: string[];
   isSelf: boolean;
+  status: "draft" | "active";
   source: "ios" | "trace" | "demo";
   createdAt: string;
   updatedAt: string;
@@ -82,6 +100,7 @@ type ContactRecord = {
 设计规则：
 
 - `displayName` 是创建联系人唯一必填的个人字段。
+- 从 Memory 页面手动创建的 `draft` 联系人允许 `displayName` 暂时为空；Action Card 创建联系人时仍必须有可辨识名称。
 - 截图里只有昵称时，昵称可以直接作为 `displayName`。
 - 不允许模型猜测真实姓名、电话、邮箱、公司或职位。
 - `externalContactId` 用于关联 iOS Contacts，`id` 始终使用 TRACE 自己的稳定 ID。
@@ -103,6 +122,7 @@ type MeetingRecord = {
   meetingLink?: string;
   notes?: string;
   participantContactIds: string[];
+  status: "draft" | "active";
   source: "ios" | "trace" | "demo";
   createdAt: string;
   updatedAt: string;
@@ -110,6 +130,8 @@ type MeetingRecord = {
 ```
 
 会议状态不长期写入数据库，而是根据当前时间动态计算，避免 App 放置一段时间后状态过期。
+
+这里的实体 `status` 只表示草稿是否已经形成有效实体，不代表会议进行状态。Memory 页面手动新建的 `draft` 会议允许 `title` 暂时为空；由 Action Card 创建会议时仍需要标题，并在执行条件满足后转为 `active`。
 
 ```ts
 type MeetingState = "ongoing" | "upcoming" | "ended" | "time_unresolved";
@@ -413,6 +435,13 @@ Memory
 [ Contacts | Meetings ]
 ```
 
+两个分段视图分别提供一个新建图标按钮：
+
+- Contacts 中点击新建，立即保存一个本地空 `draft` 联系人并打开详情页。
+- Meetings 中点击新建，立即保存一个本地空 `draft` 会议并打开详情页。
+- 新建操作不弹出要求用户先填写字段的表单。
+- 返回列表时，即使仍为空也保留该草稿，用户可以稍后继续编辑或主动删除。
+
 联系人列表行显示：
 
 - 姓名或昵称。
@@ -465,6 +494,8 @@ new Intl.Collator(locale, {
 
 相同名称使用稳定 `id` 作为第二排序键。self 联系人不置顶，仍参与正常字典序。
 
+名称为空的 `draft` 联系人统一排在所有已命名联系人之后，再按创建时间排序。
+
 ### 10.2 会议排序
 
 推荐默认顺序：
@@ -482,6 +513,7 @@ new Intl.Collator(locale, {
 - `upcoming`：正常文字和背景，不额外抢占注意力。
 - `ended`：降低文字与图标对比度，不降低到无法阅读。
 - `time_unresolved`：显示“时间待确认”，不伪装成未开始会议。
+- 空 `draft` 会议：显示“未命名会议”，归入时间未确定区域，不写入系统日历。
 
 状态在页面显示、App 回到前台以及跨越最近会议边界时重新计算。
 
@@ -535,6 +567,7 @@ Insights 只使用：
 
 - 增加 Contacts、Meetings 分段视图。
 - 增加联系人与会议详情。
+- 增加直接创建空联系人和空会议的入口与 `draft` 状态。
 - 增加专属 Memory 的新增、编辑、删除。
 - 完成字典序和会议状态视觉。
 
@@ -562,6 +595,8 @@ Insights 只使用：
 13. 进行中会议突出，未来会议正常，历史会议淡化。
 14. 会议跨越开始或结束时间后，状态无需重启 App 即可变化。
 15. Web Demo 与 iOS 使用相同业务规则。
+16. Memory 页可以新建完全为空的联系人和会议，退出详情页后草稿仍存在。
+17. 空草稿不创建空白 iOS 联系人或日历事件，也不进入模型分析上下文。
 
 ## 14. 本稿建议优先确认的三个决定
 
