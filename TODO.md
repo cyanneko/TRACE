@@ -294,6 +294,28 @@ npm test
 
 Commit: `feat(contracts): add entity memory and meeting updates`
 
+## Iteration 12 - Local Entity Repositories
+
+Status: completed
+
+- [x] Add a shared repository contract for contacts, meetings, and entity-owned Memory.
+- [x] Persist empty contact and meeting drafts in versioned Web storage.
+- [x] Add user-owned Memory create, edit, soft-delete, and owner validation.
+- [x] Add non-destructive migration from Web `trace.memories.v1` data.
+- [x] Add native SQLite tables, indexes, migration markers, and repository implementation.
+- [x] Preserve legacy SQLite and localStorage records for rollback.
+- [x] Add locale contact sorting and derived meeting state ordering.
+- [x] Cover drafts, CRUD, migration, sorting, and time boundaries with tests.
+
+Completion check:
+
+```bash
+npm run typecheck
+npm test --workspace @trace/mobile
+```
+
+Commit: `feat(memory): add local entity repositories`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

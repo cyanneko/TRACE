@@ -1,0 +1,203 @@
+import {
+  ContactRecordSchema,
+  EntityMemorySchema,
+  MemoryEntrySchema,
+  MeetingRecordSchema,
+  type ContactRecord,
+  type EntityMemory,
+  type MemoryEntry,
+  type MeetingRecord,
+} from "@trace/contracts";
+
+import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
+import { migrateLegacyMemories } from "./legacyMigration";
+import {
+  applyManualMemoryUpdate,
+  createContactDraft,
+  createManualMemory,
+  createMeetingDraft,
+  entityFactoryOptions,
+} from "./model";
+import { EntityStoreSchema, type EntityStore } from "./storageModel";
+import type { EntityOwner, EntityRepository, EntityRepositoryOptions, ManualMemoryInput } from "./types";
+
+export const ENTITY_STORAGE_KEY = "trace.entities.v2";
+export const LEGACY_MEMORY_STORAGE_KEY = "trace.memories.v1";
+
+const LegacyMemoriesSchema = MemoryEntrySchema.array();
+
+type Options = EntityRepositoryOptions & {
+  store?: KeyValueStore;
+};
+
+export class WebEntityRepository implements EntityRepository {
+  private readonly factory;
+  private readonly store: KeyValueStore;
+
+  constructor(options: Options = {}) {
+    this.factory = entityFactoryOptions(options);
+    this.store = options.store ?? getDeviceKeyValueStore();
+  }
+
+  async initialize(): Promise<void> {
+    this.read();
+  }
+
+  async listContacts(): Promise<ContactRecord[]> {
+    return this.read().contacts;
+  }
+
+  async createContactDraft(): Promise<ContactRecord> {
+    const contact = createContactDraft(this.factory);
+    const store = this.read();
+    store.contacts.push(contact);
+    this.write(store);
+    return contact;
+  }
+
+  async saveContact(contact: ContactRecord): Promise<void> {
+    const parsed = ContactRecordSchema.parse(contact);
+    const store = this.read();
+    const index = store.contacts.findIndex((item) => item.id === parsed.id);
+    if (index >= 0) store.contacts[index] = parsed;
+    else store.contacts.push(parsed);
+    this.write(store);
+  }
+
+  async deleteContact(contactId: string): Promise<void> {
+    const store = this.read();
+    store.contacts = store.contacts.filter((contact) => contact.id !== contactId);
+    this.deleteOwnedMemories(store, { ownerType: "contact", ownerId: contactId });
+    for (const meeting of store.meetings) {
+      meeting.participantContactIds = meeting.participantContactIds.filter((id) => id !== contactId);
+    }
+    this.write(store);
+  }
+
+  async listMeetings(): Promise<MeetingRecord[]> {
+    return this.read().meetings;
+  }
+
+  async createMeetingDraft(timezone: string): Promise<MeetingRecord> {
+    const meeting = createMeetingDraft(this.factory, timezone);
+    const store = this.read();
+    store.meetings.push(meeting);
+    this.write(store);
+    return meeting;
+  }
+
+  async saveMeeting(meeting: MeetingRecord): Promise<void> {
+    const parsed = MeetingRecordSchema.parse(meeting);
+    const store = this.read();
+    const index = store.meetings.findIndex((item) => item.id === parsed.id);
+    if (index >= 0) store.meetings[index] = parsed;
+    else store.meetings.push(parsed);
+    this.write(store);
+  }
+
+  async deleteMeeting(meetingId: string): Promise<void> {
+    const store = this.read();
+    store.meetings = store.meetings.filter((meeting) => meeting.id !== meetingId);
+    this.deleteOwnedMemories(store, { ownerType: "meeting", ownerId: meetingId });
+    this.write(store);
+  }
+
+  async listMemories(owner: EntityOwner): Promise<EntityMemory[]> {
+    return this.read().memories.filter(
+      (memory) =>
+        memory.status === "active" && memory.ownerType === owner.ownerType && memory.ownerId === owner.ownerId,
+    );
+  }
+
+  async addMemory(input: ManualMemoryInput): Promise<EntityMemory> {
+    const store = this.read();
+    this.assertOwnerExists(store, input);
+    const memory = createManualMemory(this.factory, input);
+    store.memories.push(memory);
+    this.write(store);
+    return memory;
+  }
+
+  async updateMemory(
+    memoryId: string,
+    patch: Pick<ManualMemoryInput, "content" | "kind">,
+  ): Promise<EntityMemory> {
+    const store = this.read();
+    const index = store.memories.findIndex((memory) => memory.id === memoryId && memory.status === "active");
+    const existing = store.memories[index];
+    if (!existing) {
+      throw new Error("Memory not found.");
+    }
+    const memory = applyManualMemoryUpdate(this.factory, existing, patch);
+    store.memories[index] = memory;
+    this.write(store);
+    return memory;
+  }
+
+  async deleteMemory(memoryId: string): Promise<void> {
+    const store = this.read();
+    const index = store.memories.findIndex((memory) => memory.id === memoryId);
+    const existing = store.memories[index];
+    if (!existing) {
+      return;
+    }
+    store.memories[index] = EntityMemorySchema.parse({
+      ...existing,
+      status: "deleted",
+      updatedAt: this.factory.now(),
+    });
+    this.write(store);
+  }
+
+  private read(): EntityStore {
+    const serialized = this.store.getItem(ENTITY_STORAGE_KEY);
+    if (serialized) {
+      const parsed = EntityStoreSchema.safeParse(JSON.parse(serialized));
+      if (!parsed.success) {
+        throw new Error("Saved TRACE entity data is invalid.");
+      }
+      return parsed.data;
+    }
+
+    const migratedAt = this.factory.now();
+    const legacySerialized = this.store.getItem(LEGACY_MEMORY_STORAGE_KEY);
+    let legacyMemories: MemoryEntry[] = [];
+    if (legacySerialized) {
+      try {
+        const parsed = LegacyMemoriesSchema.safeParse(JSON.parse(legacySerialized));
+        if (parsed.success) legacyMemories = parsed.data;
+      } catch {
+        legacyMemories = [];
+      }
+    }
+    const migrated = migrateLegacyMemories(legacyMemories, {
+      createId: this.factory.createId,
+      migratedAt,
+    });
+    this.write(migrated);
+    return migrated;
+  }
+
+  private write(store: EntityStore): void {
+    this.store.setItem(ENTITY_STORAGE_KEY, JSON.stringify(EntityStoreSchema.parse(store)));
+  }
+
+  private assertOwnerExists(store: EntityStore, owner: EntityOwner): void {
+    const exists =
+      owner.ownerType === "contact"
+        ? store.contacts.some((contact) => contact.id === owner.ownerId)
+        : store.meetings.some((meeting) => meeting.id === owner.ownerId);
+    if (!exists) {
+      throw new Error("Memory owner not found.");
+    }
+  }
+
+  private deleteOwnedMemories(store: EntityStore, owner: EntityOwner): void {
+    const now = this.factory.now();
+    store.memories = store.memories.map((memory) =>
+      memory.ownerType === owner.ownerType && memory.ownerId === owner.ownerId
+        ? EntityMemorySchema.parse({ ...memory, status: "deleted", updatedAt: now })
+        : memory,
+    );
+  }
+}

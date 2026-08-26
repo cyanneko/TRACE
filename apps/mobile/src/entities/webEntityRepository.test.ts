@@ -1,0 +1,134 @@
+import { EntityMemorySchema, type MemoryEntry } from "@trace/contracts";
+import { describe, expect, it } from "vitest";
+
+import type { KeyValueStore } from "../storage/keyValueStore";
+import { ENTITY_STORAGE_KEY, LEGACY_MEMORY_STORAGE_KEY, WebEntityRepository } from "./webEntityRepository";
+
+const ids = [
+  "00000000-0000-4000-8000-000000000001",
+  "00000000-0000-4000-8000-000000000002",
+  "00000000-0000-4000-8000-000000000003",
+  "00000000-0000-4000-8000-000000000004",
+  "00000000-0000-4000-8000-000000000005",
+  "00000000-0000-4000-8000-000000000006",
+];
+
+function memoryStore(initial: Record<string, string> = {}): KeyValueStore {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    removeItem: (key) => values.delete(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
+function repository(store: KeyValueStore) {
+  let nextId = 0;
+  return new WebEntityRepository({
+    createId: () => ids[nextId++]!,
+    now: () => "2026-08-26T03:30:00.000Z",
+    store,
+  });
+}
+
+describe("WebEntityRepository", () => {
+  it("persists empty contact and meeting drafts without creating blank memories", async () => {
+    const store = memoryStore();
+    const entities = repository(store);
+
+    const contact = await entities.createContactDraft();
+    const meeting = await entities.createMeetingDraft("Asia/Shanghai");
+
+    expect(contact).toMatchObject({ displayName: "", status: "draft" });
+    expect(meeting).toMatchObject({ title: "", status: "draft" });
+    expect(await entities.listContacts()).toHaveLength(1);
+    expect(await entities.listMeetings()).toHaveLength(1);
+    expect(await entities.listMemories({ ownerType: "contact", ownerId: contact.id })).toEqual([]);
+    expect(store.getItem(ENTITY_STORAGE_KEY)).not.toBeNull();
+  });
+
+  it("lets the user add, edit and delete an entity-owned memory", async () => {
+    const entities = repository(memoryStore());
+    const contact = await entities.createContactDraft();
+    const created = await entities.addMemory({
+      ownerType: "contact",
+      ownerId: contact.id,
+      kind: "preference",
+      content: "Prefers written updates.",
+    });
+    const updated = await entities.updateMemory(created.id, {
+      kind: "preference",
+      content: "Prefers a written summary before meetings.",
+    });
+
+    expect(updated).toMatchObject({ source: "manual", confidence: 1 });
+    expect(EntityMemorySchema.parse(updated).content).toContain("before meetings");
+
+    await entities.deleteMemory(created.id);
+    expect(await entities.listMemories({ ownerType: "contact", ownerId: contact.id })).toEqual([]);
+  });
+
+  it("migrates legacy contact and meeting memory without deleting v1 data", async () => {
+    const legacy: MemoryEntry[] = [
+      {
+        id: "10000000-0000-4000-8000-000000000001",
+        contactId: "native-maya",
+        type: "relationship_fact",
+        key: "contact:introduction",
+        value: {
+          kind: "contact_created",
+          displayName: "Maya Chen",
+          company: "Northstar",
+          jobTitle: "Head of Product",
+          phones: [],
+          emails: ["maya@example.com"],
+          notes: "Met through the design review.",
+        },
+        status: "active",
+        sourceRunId: "20000000-0000-4000-8000-000000000001",
+        sourceActionId: "create-maya",
+        sourceEvidenceRefs: ["evidence-maya"],
+        confidence: 0.92,
+        createdAt: "2026-08-20T03:30:00.000Z",
+        updatedAt: "2026-08-20T03:30:00.000Z",
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        contactId: "native-maya",
+        type: "open_loop",
+        key: "meeting:review",
+        value: {
+          kind: "scheduled_meeting",
+          externalId: "native-event-review",
+          title: "Design review",
+          startAt: "2026-08-27T07:00:00.000Z",
+          endAt: "2026-08-27T07:30:00.000Z",
+          timezone: "Asia/Shanghai",
+          participantNames: ["Maya Chen"],
+          notes: "Send the deck first.",
+        },
+        status: "active",
+        sourceRunId: "20000000-0000-4000-8000-000000000002",
+        sourceActionId: "create-review",
+        sourceEvidenceRefs: ["evidence-review"],
+        confidence: 0.95,
+        createdAt: "2026-08-21T03:30:00.000Z",
+        updatedAt: "2026-08-21T03:30:00.000Z",
+      },
+    ];
+    const legacyJson = JSON.stringify(legacy);
+    const store = memoryStore({ [LEGACY_MEMORY_STORAGE_KEY]: legacyJson });
+    const entities = repository(store);
+
+    const contacts = await entities.listContacts();
+    const meetings = await entities.listMeetings();
+
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]).toMatchObject({ displayName: "Maya Chen", externalContactId: "native-maya" });
+    expect(meetings).toHaveLength(1);
+    expect(meetings[0]).toMatchObject({ title: "Design review", externalEventId: "native-event-review" });
+    expect(await entities.listMemories({ ownerType: "contact", ownerId: contacts[0]!.id })).toHaveLength(1);
+    expect(await entities.listMemories({ ownerType: "meeting", ownerId: meetings[0]!.id })).toHaveLength(1);
+    expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBe(legacyJson);
+  });
+});
