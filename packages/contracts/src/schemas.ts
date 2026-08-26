@@ -18,9 +18,9 @@ export const ThreadParticipantSchema = z.object({
 
 export const ThreadContextSchema = z.object({
   summary: NonEmptyStringSchema,
-  participants: z.array(ThreadParticipantSchema),
-  evidence: z.array(EvidenceSchema),
-  uncertainties: z.array(NonEmptyStringSchema),
+  participants: z.array(ThreadParticipantSchema).default([]),
+  evidence: z.array(EvidenceSchema).default([]),
+  uncertainties: z.array(NonEmptyStringSchema).default([]),
 });
 
 export const MemoryProposalTargetSchema = z.discriminatedUnion("type", [
@@ -40,9 +40,9 @@ const ActionCardBaseSchema = z.object({
   id: NonEmptyStringSchema,
   title: NonEmptyStringSchema,
   confidence: ConfidenceSchema,
-  evidenceRefs: z.array(NonEmptyStringSchema),
-  editableFields: z.array(NonEmptyStringSchema),
-  riskFlags: z.array(NonEmptyStringSchema),
+  evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+  editableFields: z.array(NonEmptyStringSchema).default([]),
+  riskFlags: z.array(NonEmptyStringSchema).default([]),
   memoryProposals: z.array(MemoryProposalSchema).default([]),
 });
 
@@ -50,12 +50,12 @@ export const CreateMeetingCardSchema = ActionCardBaseSchema.extend({
   type: z.literal("create_meeting"),
   payload: z.object({
     title: NonEmptyStringSchema,
-    startAt: z.iso.datetime().nullable(),
-    endAt: z.iso.datetime().nullable(),
+    startAt: z.iso.datetime().nullable().default(null),
+    endAt: z.iso.datetime().nullable().default(null),
     timezone: NonEmptyStringSchema,
-    participantContactIds: z.array(NonEmptyStringSchema),
-    participantNames: z.array(NonEmptyStringSchema),
-    notes: z.string(),
+    participantContactIds: z.array(NonEmptyStringSchema).default([]),
+    participantNames: z.array(NonEmptyStringSchema).default([]),
+    notes: z.string().default(""),
   }),
 });
 
@@ -63,13 +63,13 @@ export const CreateContactCardSchema = ActionCardBaseSchema.extend({
   type: z.literal("create_contact"),
   payload: z.object({
     displayName: NonEmptyStringSchema,
-    givenName: z.string(),
-    familyName: z.string(),
-    company: z.string(),
-    jobTitle: z.string(),
-    phones: z.array(NonEmptyStringSchema),
-    emails: z.array(z.email()),
-    notes: z.string(),
+    givenName: z.string().default(""),
+    familyName: z.string().default(""),
+    company: z.string().default(""),
+    jobTitle: z.string().default(""),
+    phones: z.array(NonEmptyStringSchema).default([]),
+    emails: z.array(z.email()).default([]),
+    notes: z.string().default(""),
     isSelf: z.boolean().default(false),
     interactionSummary: z.string().default(""),
   }),

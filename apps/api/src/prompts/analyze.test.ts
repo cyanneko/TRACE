@@ -1,7 +1,7 @@
 import type { AnalyzeRequest } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
-import { buildAnalyzePrompt } from "./analyze.js";
+import { buildAnalyzePrompt, buildRepairPrompt } from "./analyze.js";
 
 const input: AnalyzeRequest = {
   screenshotDataUrl:
@@ -49,6 +49,7 @@ describe("buildAnalyzePrompt", () => {
     expect(prompt).toContain("There is no business count limit");
     expect(prompt).toContain("update_meeting");
     expect(prompt).toContain("directly interacts with the user");
+    expect(prompt).toContain("UTC ISO 8601 timestamps ending in Z");
     expect(prompt).not.toContain("at most three actions");
   });
 
@@ -57,5 +58,14 @@ describe("buildAnalyzePrompt", () => {
 
     expect(prompt).toContain("Design review");
     expect(prompt).toContain("Send the deck before the review");
+  });
+
+  it("tells the repair pass which schema path failed", () => {
+    const prompt = buildRepairPrompt(input, "{}", [
+      { path: "actionCards.0.payload.startAt", message: "Invalid ISO datetime" },
+    ]);
+
+    expect(prompt).toContain("actionCards.0.payload.startAt");
+    expect(prompt).toContain("Invalid ISO datetime");
   });
 });

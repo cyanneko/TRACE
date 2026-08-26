@@ -386,6 +386,29 @@ npm run build:web
 
 Commit: `feat(memory): add meeting and contact workspaces`
 
+## Iteration 16 - Cross-Provider Output Recovery
+
+Status: completed
+
+- [x] Preserve Iteration 15 as `iteration-15-meeting-contact-workspaces` before editing.
+- [x] Accept JSON wrapped in Markdown fences or provider reasoning text.
+- [x] Normalize valid ISO timestamps with timezone offsets into UTC `Z` timestamps.
+- [x] Normalize null or omitted optional contact and meeting fields without inventing identity data.
+- [x] Feed safe validation paths into the model's repair request.
+- [x] Return the first safe validation path to the app when repair still fails.
+- [x] Keep model output, screenshots, and provider keys out of validation logs.
+- [x] Add parser, Prompt, and route regressions for provider compatibility.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+```
+
+Commit: `fix(provider): recover common structured output variants`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

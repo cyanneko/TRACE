@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FixtureProvider } from "../providers/fixtureProvider.js";
 import type { ModelProvider } from "../providers/modelProvider.js";
 import { ModelOutputTruncatedError, ModelProviderTimeoutError } from "../providers/modelProviderErrors.js";
+import { ModelOutputError } from "../providers/parseModelOutput.js";
 import { buildServer } from "../server.js";
 
 const onePixelPng =
@@ -174,5 +175,24 @@ describe("POST /v1/analyze", () => {
 
     expect(response.statusCode).toBe(statusCode);
     expect(response.json().error.code).toBe(code);
+  });
+
+  it("returns safe validation paths for an invalid model response", async () => {
+    const response = await createFailingServer(
+      new ModelOutputError("invalid output", [
+        { path: "actionCards.0.payload.startAt", message: "Invalid ISO datetime" },
+      ]),
+    ).inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: validPayload,
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toMatchObject({
+      code: "INVALID_MODEL_OUTPUT",
+      issues: [{ path: "actionCards.0.payload.startAt", message: "Invalid ISO datetime" }],
+    });
+    expect(response.json().error.message).toContain("actionCards.0.payload.startAt");
   });
 });

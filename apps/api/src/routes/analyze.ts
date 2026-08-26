@@ -32,7 +32,14 @@ export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvid
         runId: randomUUID(),
       });
     } catch (error) {
-      request.log.error({ err: error }, "analysis provider failed");
+      if (error instanceof ModelOutputError) {
+        request.log.error(
+          { code: "INVALID_MODEL_OUTPUT", issues: error.issues },
+          "analysis provider returned invalid structured output",
+        );
+      } else {
+        request.log.error({ err: error }, "analysis provider failed");
+      }
 
       if (error instanceof ModelProviderTimeoutError) {
         return reply.status(504).send({
@@ -53,12 +60,15 @@ export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvid
       }
 
       const isInvalidOutput = error instanceof ModelOutputError;
+      const firstIssue = isInvalidOutput ? error.issues[0] : undefined;
+      const invalidOutputMessage = firstIssue
+        ? `The model returned invalid structured data at ${firstIssue.path}: ${firstIssue.message} Please retry.`
+        : "The model response could not be validated. Please retry.";
       return reply.status(502).send({
         error: {
           code: isInvalidOutput ? "INVALID_MODEL_OUTPUT" : "MODEL_PROVIDER_FAILED",
-          message: isInvalidOutput
-            ? "The model response could not be validated. Please retry."
-            : "The model provider is unavailable. Please retry.",
+          message: isInvalidOutput ? invalidOutputMessage : "The model provider is unavailable. Please retry.",
+          ...(isInvalidOutput ? { issues: error.issues } : {}),
         },
       });
     }

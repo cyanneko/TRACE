@@ -50,7 +50,8 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
     const deadline = Date.now() + this.analysisTimeoutMs;
     return parseAnalyzeOutputWithRepair({
       initial: () => this.complete(input, buildAnalyzePrompt(input), deadline),
-      repair: (invalidOutput) => this.complete(input, buildRepairPrompt(input, invalidOutput), deadline),
+      repair: (invalidOutput, issues) =>
+        this.complete(input, buildRepairPrompt(input, invalidOutput, issues), deadline),
     });
   }
 
