@@ -7,7 +7,7 @@ import {
 
 import { createUuid } from "../lib/uuid";
 import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
-import type { ActionExecutor } from "./types";
+import type { ActionExecutionContext, ActionExecutor } from "./types";
 
 const STORAGE_KEY = "trace.demo.action-events.v1";
 const StoredRecordsSchema = ActionExecutionRecordSchema.array();
@@ -42,7 +42,7 @@ export class DemoActionExecutor implements ActionExecutor {
     this.store = options.store ?? getDeviceKeyValueStore();
   }
 
-  async execute(sourceRunId: string, action: ActionCard): Promise<ToolResult> {
+  async execute(sourceRunId: string, action: ActionCard, context?: ActionExecutionContext): Promise<ToolResult> {
     const idempotencyKey = `${sourceRunId}:${action.id}`;
     const records = this.readRecords();
     const existing = records.find((record) => record.idempotencyKey === idempotencyKey);
@@ -50,16 +50,16 @@ export class DemoActionExecutor implements ActionExecutor {
       return existing.result;
     }
 
+    let externalId = context?.targetExternalId;
+    if (!externalId && action.type === "update_contact") externalId = action.payload.contactId ?? undefined;
+    if (!externalId && action.type === "update_meeting") externalId = action.payload.meetingId ?? undefined;
+    externalId ??= `demo-${externalPrefix(action)}-${this.createId()}`;
+
     const result: ToolResult = {
       actionId: action.id,
       success: true,
       provider: "demo",
-      externalId:
-        action.type === "update_contact" && action.payload.contactId
-          ? action.payload.contactId
-          : action.type === "update_meeting" && action.payload.meetingId
-            ? action.payload.meetingId
-          : `demo-${externalPrefix(action)}-${this.createId()}`,
+      externalId,
     };
     const record: ActionExecutionRecord = {
       idempotencyKey,

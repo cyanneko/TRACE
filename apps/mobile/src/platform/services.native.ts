@@ -12,7 +12,7 @@ export function createPlatformServices(): PlatformServices {
     memories: new SqliteMemoryRepository(),
     capabilities: {
       actions: "native",
-      calendar: "write-only",
+      calendar: "read-write",
       contacts: "native",
       entities: "sqlite",
       memory: "sqlite",

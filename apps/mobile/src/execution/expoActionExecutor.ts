@@ -13,7 +13,7 @@ import {
 import { Platform } from "react-native";
 
 import { getTraceDatabase } from "../native/traceDatabase";
-import type { ActionExecutor } from "./types";
+import type { ActionExecutionContext, ActionExecutor } from "./types";
 
 type ActionEventRow = {
   payload: string;
@@ -29,14 +29,14 @@ function failed(actionId: string, error: string): ToolResult {
 }
 
 export class ExpoActionExecutor implements ActionExecutor {
-  async execute(sourceRunId: string, action: ActionCard): Promise<ToolResult> {
+  async execute(sourceRunId: string, action: ActionCard, context?: ActionExecutionContext): Promise<ToolResult> {
     const idempotencyKey = `${sourceRunId}:${action.id}`;
     const existing = await this.findExisting(idempotencyKey);
     if (existing) {
       return existing.result;
     }
 
-    const result = await this.perform(action);
+    const result = await this.perform(action, context);
     if (result.success) {
       await this.record({
         idempotencyKey,
@@ -49,7 +49,7 @@ export class ExpoActionExecutor implements ActionExecutor {
     return result;
   }
 
-  private async perform(action: ActionCard): Promise<ToolResult> {
+  private async perform(action: ActionCard, context?: ActionExecutionContext): Promise<ToolResult> {
     try {
       if (action.type === "create_meeting") {
         return await this.createMeeting(action);
@@ -58,9 +58,9 @@ export class ExpoActionExecutor implements ActionExecutor {
         return await this.createContact(action);
       }
       if (action.type === "update_contact") {
-        return await this.updateContact(action);
+        return await this.updateContact(action, context?.targetExternalId);
       }
-      return failed(action.id, "Meeting updates are not available in the native executor yet.");
+      return await this.updateMeeting(action, context?.targetExternalId);
     } catch (error) {
       return failed(action.id, error instanceof Error ? error.message : "The native write failed.");
     }
@@ -71,7 +71,7 @@ export class ExpoActionExecutor implements ActionExecutor {
       return failed(action.id, "Meeting start and end times are required before confirmation.");
     }
 
-    const permission = await Calendar.requestCalendarPermissions(true);
+    const permission = await Calendar.requestCalendarPermissions(false);
     if (permission.status !== "granted") {
       return failed(action.id, "Calendar write permission was not granted.");
     }
@@ -122,8 +122,12 @@ export class ExpoActionExecutor implements ActionExecutor {
     };
   }
 
-  private async updateContact(action: Extract<ActionCard, { type: "update_contact" }>): Promise<ToolResult> {
-    if (!action.payload.contactId) {
+  private async updateContact(
+    action: Extract<ActionCard, { type: "update_contact" }>,
+    targetExternalId?: string,
+  ): Promise<ToolResult> {
+    const contactId = targetExternalId ?? action.payload.contactId;
+    if (!contactId) {
       return failed(action.id, "A matched contact is required before updating native contacts.");
     }
 
@@ -132,7 +136,7 @@ export class ExpoActionExecutor implements ActionExecutor {
       return failed(action.id, "Contacts permission was not granted.");
     }
 
-    const contact = new Contact(action.payload.contactId);
+    const contact = new Contact(contactId);
     const patch: ContactPatch = {};
     const phoneChanges = action.payload.changes.filter((change) => change.field === "phone");
     const emailChanges = action.payload.changes.filter((change) => change.field === "email");
@@ -185,6 +189,48 @@ export class ExpoActionExecutor implements ActionExecutor {
       success: true,
       provider: "native",
       externalId: contact.id,
+    };
+  }
+
+  private async updateMeeting(
+    action: Extract<ActionCard, { type: "update_meeting" }>,
+    targetExternalId?: string,
+  ): Promise<ToolResult> {
+    const patch: Partial<Calendar.ModifiableEventProperties> = {};
+    for (const change of action.payload.changes) {
+      if (change.field === "title") patch.title = change.nextValue!;
+      if (change.field === "timezone") patch.timeZone = change.nextValue!;
+      if (change.field === "location") patch.location = change.nextValue;
+      if (change.field === "meetingLink") patch.url = change.nextValue ?? "";
+      if (change.field === "notes") patch.notes = change.nextValue ?? "";
+      if (change.field === "startAt") {
+        if (!change.nextValue) return failed(action.id, "A meeting start time cannot be cleared.");
+        patch.startDate = new Date(change.nextValue);
+      }
+      if (change.field === "endAt") {
+        if (!change.nextValue) return failed(action.id, "A meeting end time cannot be cleared.");
+        patch.endDate = new Date(change.nextValue);
+      }
+    }
+
+    const hasCalendarChanges = Object.keys(patch).length > 0;
+    if (hasCalendarChanges) {
+      if (!targetExternalId) {
+        return failed(action.id, "A linked calendar event is required before updating this meeting.");
+      }
+      const permission = await Calendar.requestCalendarPermissions(false);
+      if (permission.status !== "granted") {
+        return failed(action.id, "Calendar access permission was not granted.");
+      }
+      const event = await Calendar.ExpoCalendarEvent.get(targetExternalId);
+      await event.update(patch);
+    }
+
+    return {
+      actionId: action.id,
+      success: true,
+      provider: "native",
+      externalId: targetExternalId,
     };
   }
 

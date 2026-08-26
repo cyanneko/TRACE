@@ -1,4 +1,4 @@
-import type { CreateMeetingCard } from "@trace/contracts";
+import type { CreateMeetingCard, UpdateMeetingCard } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { KeyValueStore } from "../storage/keyValueStore";
@@ -51,5 +51,36 @@ describe("DemoActionExecutor", () => {
     expect(second).toEqual(first);
     expect(executor.listRecords()).toHaveLength(1);
     expect(idCalls).toBe(1);
+  });
+
+  it("updates the resolved external calendar event instead of creating another id", async () => {
+    const executor = new DemoActionExecutor({ store: memoryStore() });
+    const update: UpdateMeetingCard = {
+      id: "action-update-meeting",
+      type: "update_meeting",
+      title: "Move review",
+      confidence: 0.9,
+      evidenceRefs: ["evidence-2"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        meetingId: "local-meeting-id",
+        displayTitle: "Review",
+        changes: [
+          {
+            field: "startAt",
+            previousValue: "2026-08-27T07:00:00.000Z",
+            nextValue: "2026-08-28T07:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const result = await executor.execute("2f887426-3d1f-4b68-a6bc-58e975ac35fb", update, {
+      targetExternalId: "native-event-id",
+    });
+
+    expect(result).toMatchObject({ success: true, externalId: "native-event-id" });
   });
 });

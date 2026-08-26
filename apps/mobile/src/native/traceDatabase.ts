@@ -73,6 +73,12 @@ async function openTraceDatabase(): Promise<SQLiteDatabase> {
       name TEXT PRIMARY KEY NOT NULL,
       applied_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS entity_action_commits (
+      idempotency_key TEXT PRIMARY KEY NOT NULL,
+      payload TEXT NOT NULL,
+      committed_at TEXT NOT NULL
+    );
   `);
   return database;
 }

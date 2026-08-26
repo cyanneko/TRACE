@@ -43,7 +43,9 @@ import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen"
 import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
+import { WebEntityRepository } from "./src/entities/webEntityRepository";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
+import { executeAndCommit } from "./src/execution/executeAndCommit";
 import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
 import { deriveMemoryCandidates } from "./src/memory/policy";
@@ -100,8 +102,10 @@ export default function App() {
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
   const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
   const fixtureActionExecutor = useMemo(() => new DemoActionExecutor(), []);
+  const fixtureEntityRepository = useMemo(() => new WebEntityRepository(), []);
   const fixtureMemoryRepository = useMemo(() => new WebMemoryRepository(), []);
   const actionExecutor = platformServices.executor;
+  const entityRepository = (provider?.fixture ?? true) ? fixtureEntityRepository : platformServices.entities;
   const memoryRepository = (provider?.fixture ?? true) ? fixtureMemoryRepository : platformServices.memories;
 
   useEffect(() => {
@@ -294,7 +298,7 @@ export default function App() {
     try {
       const executor = analysis.provider.fixture ? fixtureActionExecutor : actionExecutor;
       for (const action of confirmedActions) {
-        results.push(await executor.execute(analysis.runId, action));
+        results.push(await executeAndCommit(analysis.runId, action, executor, entityRepository, timezone()));
       }
 
       const now = new Date().toISOString();

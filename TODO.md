@@ -316,6 +316,29 @@ npm test --workspace @trace/mobile
 
 Commit: `feat(memory): add local entity repositories`
 
+## Iteration 13 - Confirmed Action Entity Commits
+
+Status: completed
+
+- [x] Add an execution coordinator that commits local entity state only after tool success.
+- [x] Resolve local contact and meeting IDs to native external IDs before updates.
+- [x] Implement typed native meeting updates for title, time, timezone, location, link, and notes.
+- [x] Keep meeting participant changes as local contact relationships.
+- [x] Commit action-created entities and Memory Proposals idempotently by `runId:actionId`.
+- [x] Preserve the external result when a local commit needs retrying.
+- [x] Request full calendar access required to read and update existing events.
+- [x] Cover success, failure, retry, meeting participants, and duplicate prevention with tests.
+
+Completion check:
+
+```bash
+npm run typecheck
+npm test
+npm run build:web
+```
+
+Commit: `feat(execution): commit successful actions to entity memory`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

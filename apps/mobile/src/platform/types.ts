@@ -5,7 +5,7 @@ import type { MemoryRepository } from "../memory/types";
 
 export type PlatformCapabilities = {
   actions: "demo" | "native";
-  calendar: "demo" | "write-only";
+  calendar: "demo" | "read-write";
   contacts: "demo" | "native";
   entities: "local-storage" | "sqlite";
   memory: "local-storage" | "sqlite";

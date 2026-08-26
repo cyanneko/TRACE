@@ -11,6 +11,7 @@ import {
 import type { SQLiteDatabase } from "expo-sqlite";
 
 import { getTraceDatabase } from "../native/traceDatabase";
+import { deriveActionEntityEffects } from "./actionEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
   applyManualMemoryUpdate,
@@ -19,7 +20,14 @@ import {
   createMeetingDraft,
   entityFactoryOptions,
 } from "./model";
-import type { EntityOwner, EntityRepository, EntityRepositoryOptions, ManualMemoryInput } from "./types";
+import { EntityCommitRecordSchema, type EntityCommitRecord } from "./storageModel";
+import type {
+  CommitSuccessfulActionInput,
+  EntityOwner,
+  EntityRepository,
+  EntityRepositoryOptions,
+  ManualMemoryInput,
+} from "./types";
 
 const ENTITY_MIGRATION = "entity-memory-v2";
 
@@ -55,6 +63,18 @@ export class SqliteEntityRepository implements EntityRepository {
     const database = await this.database();
     const rows = await database.getAllAsync<PayloadRow>("SELECT payload FROM contacts ORDER BY sort_name, id");
     return parseRows(rows, (input) => ContactRecordSchema.safeParse(input));
+  }
+
+  async findContact(contactId: string): Promise<ContactRecord | null> {
+    const database = await this.database();
+    const row = await database.getFirstAsync<PayloadRow>(
+      "SELECT payload FROM contacts WHERE id = ? OR external_contact_id = ? LIMIT 1",
+      contactId,
+      contactId,
+    );
+    if (!row) return null;
+    const parsed = ContactRecordSchema.safeParse(JSON.parse(row.payload));
+    return parsed.success ? parsed.data : null;
   }
 
   async createContactDraft(): Promise<ContactRecord> {
@@ -96,6 +116,18 @@ export class SqliteEntityRepository implements EntityRepository {
       "SELECT payload FROM meetings ORDER BY start_at IS NULL, start_at, id",
     );
     return parseRows(rows, (input) => MeetingRecordSchema.safeParse(input));
+  }
+
+  async findMeeting(meetingId: string): Promise<MeetingRecord | null> {
+    const database = await this.database();
+    const row = await database.getFirstAsync<PayloadRow>(
+      "SELECT payload FROM meetings WHERE id = ? OR external_event_id = ? LIMIT 1",
+      meetingId,
+      meetingId,
+    );
+    if (!row) return null;
+    const parsed = MeetingRecordSchema.safeParse(JSON.parse(row.payload));
+    return parsed.success ? parsed.data : null;
   }
 
   async createMeetingDraft(timezone: string): Promise<MeetingRecord> {
@@ -169,6 +201,46 @@ export class SqliteEntityRepository implements EntityRepository {
     await this.writeMemory(database, { ...existing, status: "deleted", updatedAt: this.factory.now() });
   }
 
+  async commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord> {
+    const database = await this.database();
+    const idempotencyKey = `${input.sourceRunId}:${input.action.id}`;
+    const existingRow = await database.getFirstAsync<PayloadRow>(
+      "SELECT payload FROM entity_action_commits WHERE idempotency_key = ?",
+      idempotencyKey,
+    );
+    if (existingRow) {
+      return EntityCommitRecordSchema.parse(JSON.parse(existingRow.payload));
+    }
+
+    const [contacts, meetings, memories] = await Promise.all([
+      this.listContacts(),
+      this.listMeetings(),
+      this.listAllEntityMemories(database),
+    ]);
+    const effects = deriveActionEntityEffects({ contacts, meetings, memories }, input, this.factory);
+    const record = EntityCommitRecordSchema.parse({
+      idempotencyKey,
+      entityRef: effects.entityRef,
+      writtenMemoryIds: effects.memories.map((memory) => memory.id),
+      skippedMemoryProposals: effects.skippedMemoryProposals,
+      committedAt: this.factory.now(),
+    });
+
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      if (effects.contact) await this.writeContact(transaction, effects.contact);
+      if (effects.meeting) await this.writeMeeting(transaction, effects.meeting);
+      for (const memory of effects.memories) await this.writeMemory(transaction, memory);
+      await transaction.runAsync(
+        `INSERT INTO entity_action_commits (idempotency_key, payload, committed_at)
+         VALUES (?, ?, ?)`,
+        record.idempotencyKey,
+        JSON.stringify(record),
+        record.committedAt,
+      );
+    });
+    return record;
+  }
+
   private async database(): Promise<SQLiteDatabase> {
     await this.initialize();
     return getTraceDatabase();
@@ -199,6 +271,11 @@ export class SqliteEntityRepository implements EntityRepository {
         migratedAt,
       );
     });
+  }
+
+  private async listAllEntityMemories(database: SQLiteDatabase): Promise<EntityMemory[]> {
+    const rows = await database.getAllAsync<PayloadRow>("SELECT payload FROM entity_memories");
+    return parseRows(rows, (input) => EntityMemorySchema.safeParse(input));
   }
 
   private async assertOwnerExists(database: SQLiteDatabase, owner: EntityOwner): Promise<void> {

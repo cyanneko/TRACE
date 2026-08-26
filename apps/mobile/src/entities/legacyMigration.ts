@@ -200,6 +200,7 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
     contacts: contacts.map((contact) => ContactRecordSchema.parse(contact)),
     meetings,
     memories: entityMemories,
+    entityCommits: [],
     migratedFromV1At: options.migratedAt,
   };
 }

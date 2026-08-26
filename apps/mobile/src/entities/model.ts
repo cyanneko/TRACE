@@ -10,7 +10,7 @@ import {
 import { createUuid } from "../lib/uuid";
 import type { EntityRepositoryOptions, ManualMemoryInput } from "./types";
 
-type EntityFactoryOptions = Required<EntityRepositoryOptions>;
+export type EntityFactoryOptions = Required<EntityRepositoryOptions>;
 
 export function entityFactoryOptions(options: EntityRepositoryOptions = {}): EntityFactoryOptions {
   return {

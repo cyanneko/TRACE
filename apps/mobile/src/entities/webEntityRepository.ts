@@ -10,6 +10,7 @@ import {
 } from "@trace/contracts";
 
 import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
+import { deriveActionEntityEffects } from "./actionEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
   applyManualMemoryUpdate,
@@ -18,8 +19,19 @@ import {
   createMeetingDraft,
   entityFactoryOptions,
 } from "./model";
-import { EntityStoreSchema, type EntityStore } from "./storageModel";
-import type { EntityOwner, EntityRepository, EntityRepositoryOptions, ManualMemoryInput } from "./types";
+import {
+  EntityCommitRecordSchema,
+  EntityStoreSchema,
+  type EntityCommitRecord,
+  type EntityStore,
+} from "./storageModel";
+import type {
+  CommitSuccessfulActionInput,
+  EntityOwner,
+  EntityRepository,
+  EntityRepositoryOptions,
+  ManualMemoryInput,
+} from "./types";
 
 export const ENTITY_STORAGE_KEY = "trace.entities.v2";
 export const LEGACY_MEMORY_STORAGE_KEY = "trace.memories.v1";
@@ -45,6 +57,14 @@ export class WebEntityRepository implements EntityRepository {
 
   async listContacts(): Promise<ContactRecord[]> {
     return this.read().contacts;
+  }
+
+  async findContact(contactId: string): Promise<ContactRecord | null> {
+    return (
+      this.read().contacts.find(
+        (contact) => contact.id === contactId || contact.externalContactId === contactId,
+      ) ?? null
+    );
   }
 
   async createContactDraft(): Promise<ContactRecord> {
@@ -76,6 +96,13 @@ export class WebEntityRepository implements EntityRepository {
 
   async listMeetings(): Promise<MeetingRecord[]> {
     return this.read().meetings;
+  }
+
+  async findMeeting(meetingId: string): Promise<MeetingRecord | null> {
+    return (
+      this.read().meetings.find((meeting) => meeting.id === meetingId || meeting.externalEventId === meetingId) ??
+      null
+    );
   }
 
   async createMeetingDraft(timezone: string): Promise<MeetingRecord> {
@@ -147,6 +174,39 @@ export class WebEntityRepository implements EntityRepository {
       updatedAt: this.factory.now(),
     });
     this.write(store);
+  }
+
+  async commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord> {
+    const store = this.read();
+    const idempotencyKey = `${input.sourceRunId}:${input.action.id}`;
+    const existing = store.entityCommits.find((record) => record.idempotencyKey === idempotencyKey);
+    if (existing) {
+      return existing;
+    }
+
+    const effects = deriveActionEntityEffects(store, input, this.factory);
+    if (effects.contact) {
+      const index = store.contacts.findIndex((contact) => contact.id === effects.contact!.id);
+      if (index >= 0) store.contacts[index] = effects.contact;
+      else store.contacts.push(effects.contact);
+    }
+    if (effects.meeting) {
+      const index = store.meetings.findIndex((meeting) => meeting.id === effects.meeting!.id);
+      if (index >= 0) store.meetings[index] = effects.meeting;
+      else store.meetings.push(effects.meeting);
+    }
+    store.memories.push(...effects.memories);
+
+    const record = EntityCommitRecordSchema.parse({
+      idempotencyKey,
+      entityRef: effects.entityRef,
+      writtenMemoryIds: effects.memories.map((memory) => memory.id),
+      skippedMemoryProposals: effects.skippedMemoryProposals,
+      committedAt: this.factory.now(),
+    });
+    store.entityCommits.push(record);
+    this.write(store);
+    return record;
   }
 
   private read(): EntityStore {

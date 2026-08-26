@@ -1,4 +1,9 @@
-import { EntityMemorySchema, type MemoryEntry } from "@trace/contracts";
+import {
+  EntityMemorySchema,
+  type CreateMeetingCard,
+  type MemoryEntry,
+  type UpdateMeetingCard,
+} from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { KeyValueStore } from "../storage/keyValueStore";
@@ -130,5 +135,99 @@ describe("WebEntityRepository", () => {
     expect(await entities.listMemories({ ownerType: "contact", ownerId: contacts[0]!.id })).toHaveLength(1);
     expect(await entities.listMemories({ ownerType: "meeting", ownerId: meetings[0]!.id })).toHaveLength(1);
     expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBe(legacyJson);
+  });
+
+  it("commits a successful meeting and its proposed memory exactly once", async () => {
+    const entities = repository(memoryStore());
+    const action: CreateMeetingCard = {
+      id: "create-review",
+      type: "create_meeting",
+      title: "Create design review",
+      confidence: 0.94,
+      evidenceRefs: ["evidence-review"],
+      editableFields: [],
+      riskFlags: [],
+      memoryProposals: [
+        {
+          target: { type: "action_entity" },
+          kind: "commitment",
+          content: "Send the deck before the review.",
+          evidenceRefs: ["evidence-review"],
+        },
+      ],
+      payload: {
+        title: "Design review",
+        startAt: "2026-08-27T07:00:00.000Z",
+        endAt: "2026-08-27T07:30:00.000Z",
+        timezone: "Asia/Shanghai",
+        participantContactIds: [],
+        participantNames: [],
+        notes: "Send the deck.",
+      },
+    };
+    const input = {
+      sourceRunId: "20000000-0000-4000-8000-000000000003",
+      action,
+      result: {
+        actionId: action.id,
+        success: true as const,
+        provider: "demo" as const,
+        externalId: "demo-event-review",
+      },
+      timezone: "Asia/Shanghai",
+    };
+
+    const first = await entities.commitSuccessfulAction(input);
+    const second = await entities.commitSuccessfulAction(input);
+    const meetings = await entities.listMeetings();
+    const memories = await entities.listMemories({ ownerType: "meeting", ownerId: first.entityRef.id });
+
+    expect(second).toEqual(first);
+    expect(meetings).toHaveLength(1);
+    expect(memories).toHaveLength(1);
+    expect(memories[0]?.content).toBe("Send the deck before the review.");
+  });
+
+  it("updates a meeting participant relationship with a local contact id", async () => {
+    const entities = repository(memoryStore());
+    const contact = await entities.createContactDraft();
+    await entities.saveContact({ ...contact, displayName: "Maya", status: "active" });
+    const meeting = await entities.createMeetingDraft("Asia/Shanghai");
+    await entities.saveMeeting({ ...meeting, title: "Design review", status: "active" });
+    const action: UpdateMeetingCard = {
+      id: "add-maya",
+      type: "update_meeting",
+      title: "Add Maya to design review",
+      confidence: 1,
+      evidenceRefs: ["evidence-attendee"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        meetingId: meeting.id,
+        displayTitle: "Design review",
+        changes: [
+          {
+            field: "participantContactIds",
+            previousValue: [],
+            nextValue: [contact.id],
+          },
+        ],
+      },
+    };
+
+    await entities.commitSuccessfulAction({
+      sourceRunId: "20000000-0000-4000-8000-000000000004",
+      action,
+      result: {
+        actionId: action.id,
+        success: true,
+        provider: "demo",
+        externalId: "demo-event-review",
+      },
+      timezone: "Asia/Shanghai",
+    });
+
+    expect((await entities.findMeeting(meeting.id))?.participantContactIds).toEqual([contact.id]);
   });
 });

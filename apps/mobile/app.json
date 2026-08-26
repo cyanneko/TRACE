@@ -48,8 +48,8 @@
       [
         "expo-calendar",
         {
-          "writeOnlyAccess": true,
-          "writeOnlyCalendarPermission": "Allow TRACE to add only the meetings you explicitly confirm."
+          "writeOnlyAccess": false,
+          "calendarPermission": "Allow TRACE to read meeting context and apply only the calendar changes you explicitly confirm."
         }
       ],
       "expo-sqlite",
