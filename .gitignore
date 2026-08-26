@@ -25,6 +25,8 @@ android/app/build/
 
 # Test and tooling output
 coverage/
+playwright-report/
+test-results/
 .turbo/
 *.tsbuildinfo
 

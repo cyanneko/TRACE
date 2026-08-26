@@ -127,21 +127,21 @@ npm run typecheck
 
 Manual check: rejected actions cause no writes; repeated confirmation causes no duplicates.
 
-Commit: `feat(agent): execute actions and ground insights in memory`
+Commit: `9de1719`
 
 ## Iteration 5 - iOS Boundary and Handoff
 
-Status: pending
+Status: completed
 
-- [ ] Add platform-specific `ContactSource`, `ActionExecutor`, and `MemoryRepository` modules.
-- [ ] Add the native contacts implementation.
-- [ ] Add the native SQLite implementation or a documented safe fallback.
-- [ ] Prepare the native calendar implementation for an EAS development build.
-- [ ] Add permission descriptions and capability checks.
-- [ ] Add automated contract, memory-policy, reducer, and API smoke tests.
-- [ ] Verify the Web flow at an iPhone-sized viewport.
-- [ ] Write environment setup, DeepSeek configuration, fixture mode, WSL, Expo Go, and EAS notes.
-- [ ] Record known limitations honestly.
+- [x] Add platform-specific `ContactSource`, `ActionExecutor`, and `MemoryRepository` modules.
+- [x] Add the native contacts implementation.
+- [x] Add the native SQLite implementation with a Web localStorage adapter.
+- [x] Prepare the native calendar implementation for an EAS development build.
+- [x] Add permission descriptions and capability checks.
+- [x] Add automated contract, memory-policy, reducer, API, and browser smoke tests.
+- [x] Verify the Web flow at an iPhone-sized viewport.
+- [x] Write environment setup, provider configuration, fixture mode, WSL, Expo Go, and EAS notes.
+- [x] Record known limitations honestly.
 
 Completion check:
 
@@ -152,7 +152,7 @@ npm run build:web
 
 Manual check: complete the demo twice from a clean browser profile using the README only.
 
-Commit: pending
+Commit: `feat(ios): add native adapters and delivery handoff`
 
 ## Deferred Beyond MVP
 

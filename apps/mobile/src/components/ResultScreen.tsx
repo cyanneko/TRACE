@@ -23,6 +23,7 @@ import { colors } from "../theme";
 type Props = {
   analysis: AnalyzeResult;
   execution: ExecutionState;
+  executionMode: "demo" | "native";
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onNewThread: () => void;
   onRetryInsights: () => void;
@@ -68,7 +69,14 @@ function actionLabel(type: string): string {
   return "Contact update";
 }
 
-export function ResultScreen({ analysis, execution, onDeleteMemory, onNewThread, onRetryInsights }: Props) {
+export function ResultScreen({
+  analysis,
+  execution,
+  executionMode,
+  onDeleteMemory,
+  onNewThread,
+  onRetryInsights,
+}: Props) {
   const [copiedInsight, setCopiedInsight] = useState<number | null>(null);
   const evidenceById = useMemo(
     () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
@@ -95,10 +103,12 @@ export function ResultScreen({ analysis, execution, onDeleteMemory, onNewThread,
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>EXECUTION</Text>
             <Text style={styles.title}>Actions confirmed</Text>
-            <Text style={styles.lede}>TRACE used successful Demo writes to update context before generating help.</Text>
+            <Text style={styles.lede}>
+              TRACE used successful {executionMode === "demo" ? "Demo" : "device"} writes to update context before generating help.
+            </Text>
           </View>
           <View style={styles.demoBadge}>
-            <Text style={styles.demoBadgeText}>Demo writes</Text>
+            <Text style={styles.demoBadgeText}>{executionMode === "demo" ? "Demo writes" : "Device writes"}</Text>
           </View>
         </View>
 

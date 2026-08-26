@@ -2,6 +2,7 @@ import {
   ActionCardSchema,
   type ActionCard,
   type AnalyzeResult,
+  type ContactSummary,
   type FixtureId,
   type MemoryEntry,
   type ProviderInfo,
@@ -39,12 +40,13 @@ import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from ".
 import { ActionCardView } from "./src/components/ActionCardView";
 import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
-import { demoContacts } from "./src/data/demoContacts";
+import { DemoContactSource } from "./src/contacts/demoContactSource";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
 import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
 import { deriveMemoryCandidates } from "./src/memory/policy";
 import { WebMemoryRepository } from "./src/memory/webMemoryRepository";
+import { createPlatformServices } from "./src/platform/services";
 import { colors } from "./src/theme";
 
 type Phase = "capture" | "review" | "result";
@@ -72,14 +74,19 @@ export default function App() {
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [healthError, setHealthError] = useState(false);
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
+  const [analysisContacts, setAnalysisContacts] = useState<ContactSummary[]>([]);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeMemoryCount, setActiveMemoryCount] = useState(0);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
-  const actionExecutor = useMemo(() => new DemoActionExecutor(), []);
-  const memoryRepository = useMemo(() => new WebMemoryRepository(), []);
+  const platformServices = useMemo(() => createPlatformServices(), []);
+  const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
+  const fixtureActionExecutor = useMemo(() => new DemoActionExecutor(), []);
+  const fixtureMemoryRepository = useMemo(() => new WebMemoryRepository(), []);
+  const actionExecutor = platformServices.executor;
+  const memoryRepository = (provider?.fixture ?? true) ? fixtureMemoryRepository : platformServices.memories;
 
   useEffect(() => {
     let active = true;
@@ -127,9 +134,12 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
-      const memories = await memoryRepository.listActive();
+      const [memories, contacts] = await Promise.all([
+        memoryRepository.listActive(),
+        (provider?.fixture ?? true) ? fixtureContactSource.list() : platformServices.contacts.list(),
+      ]);
       const result = await analyzeScreenshot({
-        contacts: demoContacts,
+        contacts,
         currentTime: new Date().toISOString(),
         fixtureId: provider?.fixture === false ? undefined : fixtureId,
         memories,
@@ -138,6 +148,7 @@ export default function App() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       setAnalysis(result);
+      setAnalysisContacts(contacts);
       setActiveMemoryCount(memories.length);
       setProvider(result.provider);
       setCards(result.actionCards);
@@ -188,7 +199,7 @@ export default function App() {
       confirmedActions,
       toolResults: results,
       memories: activeMemories,
-      contacts: demoContacts,
+      contacts: analysisContacts,
       timezone: timezone(),
       currentTime: new Date().toISOString(),
     });
@@ -217,8 +228,9 @@ export default function App() {
     const results: ToolResult[] = [];
 
     try {
+      const executor = analysis.provider.fixture ? fixtureActionExecutor : actionExecutor;
       for (const action of confirmedActions) {
-        results.push(await actionExecutor.execute(analysis.runId, action));
+        results.push(await executor.execute(analysis.runId, action));
       }
 
       const now = new Date().toISOString();
@@ -284,6 +296,7 @@ export default function App() {
 
   function reset() {
     setAnalysis(null);
+    setAnalysisContacts([]);
     setCards([]);
     setSelectedIds(new Set());
     setError(null);
@@ -350,6 +363,7 @@ export default function App() {
           onCardToggle={toggleCard}
           onConfirm={() => void confirmSelectedActions()}
           confirming={execution.status === "running"}
+          executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
           screenshot={screenshot}
           selectedIds={selectedIds}
         />
@@ -357,6 +371,7 @@ export default function App() {
         <ResultScreen
           analysis={analysis}
           execution={execution}
+          executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
           onDeleteMemory={deleteMemory}
           onNewThread={startNewThread}
           onRetryInsights={() => void retryInsights()}
@@ -512,6 +527,7 @@ type ReviewProps = {
   cards: ActionCard[];
   compact: boolean;
   error: string | null;
+  executionMode: "demo" | "native";
   confirming: boolean;
   onBack: () => void;
   onCardChange: (card: ActionCard) => void;
@@ -527,6 +543,7 @@ function ReviewScreen({
   compact,
   confirming,
   error,
+  executionMode,
   onBack,
   onCardChange,
   onCardToggle,
@@ -642,7 +659,8 @@ function ReviewScreen({
             <View style={styles.confirmationCopy}>
               <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
               <Text style={styles.confirmationDetail}>
-                {selectedIds.size} selected action(s) will be written by the Demo executor. Unselected cards stay untouched.
+                {selectedIds.size} selected action(s) will be written by the {executionMode === "demo" ? "Demo" : "iOS"} executor.
+                Unselected cards stay untouched.
               </Text>
             </View>
             <Pressable

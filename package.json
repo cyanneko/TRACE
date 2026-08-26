@@ -12,11 +12,13 @@
   },
   "scripts": {
     "dev:api": "npm run dev --workspace @trace/api",
+    "dev:client": "npm run dev:client --workspace @trace/mobile",
     "dev:web": "npm run web --workspace @trace/mobile",
     "build": "npm run build --workspaces --if-present",
     "build:web": "npm run build:web --workspace @trace/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test",
     "check": "npm run typecheck && npm test"
   },
   "packageManager": "npm@10.9.8",

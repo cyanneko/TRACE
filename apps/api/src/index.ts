@@ -1,4 +1,11 @@
-import "dotenv/config";
+import { config } from "dotenv";
+import { fileURLToPath } from "node:url";
+
+const apiDirectory = fileURLToPath(new URL("../", import.meta.url));
+config({
+  path: [`${apiDirectory}.env`, `${apiDirectory}../../.env`],
+  quiet: true,
+});
 
 import { buildServer } from "./server.js";
 import { readEnvironment } from "./config.js";
