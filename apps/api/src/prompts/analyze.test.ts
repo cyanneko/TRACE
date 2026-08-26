@@ -49,6 +49,9 @@ describe("buildAnalyzePrompt", () => {
     expect(prompt).toContain("There is no business count limit");
     expect(prompt).toContain("update_meeting");
     expect(prompt).toContain("directly interacts with the user");
+    expect(prompt).toContain("create_contact with isSelf true");
+    expect(prompt).toContain("Meetings must include every attendee, including the user");
+    expect(prompt).toContain("For update_meeting, put pending names in payload.participantNames");
     expect(prompt).toContain("UTC ISO 8601 timestamps ending in Z");
     expect(prompt).not.toContain("at most three actions");
   });

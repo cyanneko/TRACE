@@ -8,6 +8,7 @@ function contactSummary(contact: ContactRecord): ContactSummary {
     jobTitle: contact.jobTitle ?? "",
     phones: contact.phones,
     emails: contact.emails,
+    isSelf: contact.isSelf,
   };
 }
 
@@ -46,6 +47,7 @@ export function mergeContactContext(
       jobTitle: source.jobTitle || local.jobTitle || "",
       phones: source.phones.length > 0 ? source.phones : local.phones,
       emails: source.emails.length > 0 ? source.emails : local.emails,
+      isSelf: local.isSelf || source.isSelf || undefined,
     };
   });
 

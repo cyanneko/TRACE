@@ -268,6 +268,10 @@ export class WebEntityRepository implements EntityRepository {
     }
 
     const effects = deriveActionEntityEffects(store, input, this.factory);
+    for (const demoted of effects.demotedContacts) {
+      const index = store.contacts.findIndex((contact) => contact.id === demoted.id);
+      if (index >= 0) store.contacts[index] = demoted;
+    }
     if (effects.contact) {
       const index = store.contacts.findIndex((contact) => contact.id === effects.contact!.id);
       if (index >= 0) store.contacts[index] = effects.contact;

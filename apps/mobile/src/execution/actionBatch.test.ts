@@ -1,7 +1,14 @@
-import type { CreateContactCard, CreateMeetingCard, ToolResult } from "@trace/contracts";
+import type {
+  ContactRecord,
+  CreateContactCard,
+  CreateMeetingCard,
+  MeetingRecord,
+  ToolResult,
+  UpdateMeetingCard,
+} from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
-import { linkCreatedContactsToMeeting, orderActionsForExecution } from "./actionBatch";
+import { linkContactsToMeetingAction, orderActionsForExecution } from "./actionBatch";
 
 const contact: CreateContactCard = {
   id: "action-create-maya",
@@ -65,7 +72,7 @@ describe("action batch planning", () => {
   });
 
   it("links a meeting alias to a successfully created contact", () => {
-    const linked = linkCreatedContactsToMeeting(meeting, [contact, meeting], [result]);
+    const linked = linkContactsToMeetingAction(meeting, [contact, meeting], [result]);
     expect(linked.type).toBe("create_meeting");
     if (linked.type === "create_meeting") {
       expect(linked.payload.participantContactIds).toEqual([result.entityRef?.id]);
@@ -78,7 +85,7 @@ describe("action batch planning", () => {
       id: "action-create-another-maya",
       payload: { ...contact.payload, displayName: "Maya Lin", familyName: "Lin" },
     };
-    const ambiguous = linkCreatedContactsToMeeting(
+    const ambiguous = linkContactsToMeetingAction(
       meeting,
       [contact, secondContact, meeting],
       [
@@ -93,6 +100,90 @@ describe("action batch planning", () => {
     expect(ambiguous.type).toBe("create_meeting");
     if (ambiguous.type === "create_meeting") {
       expect(ambiguous.payload.participantContactIds).toEqual([]);
+    }
+  });
+
+  it("resolves a self alias to an existing self contact", () => {
+    const self: ContactRecord = {
+      id: "00000000-0000-4000-8000-000000000201",
+      displayName: "Kai",
+      phones: [],
+      emails: [],
+      isSelf: true,
+      status: "active",
+      source: "trace",
+      createdAt: "2026-08-26T03:30:00.000Z",
+      updatedAt: "2026-08-26T03:30:00.000Z",
+    };
+    const linked = linkContactsToMeetingAction(
+      { ...meeting, payload: { ...meeting.payload, participantNames: ["我"] } },
+      [meeting],
+      [],
+      [self],
+    );
+
+    expect(linked.type).toBe("create_meeting");
+    if (linked.type === "create_meeting") {
+      expect(linked.payload.participantContactIds).toEqual([self.id]);
+    }
+  });
+
+  it("adds a same-run self contact to an existing meeting update", () => {
+    const selfAction: CreateContactCard = {
+      ...contact,
+      id: "action-create-self",
+      title: "Create my contact",
+      payload: { ...contact.payload, displayName: "Kai", givenName: "Kai", familyName: "", isSelf: true },
+    };
+    const selfResult: ToolResult = {
+      ...result,
+      actionId: selfAction.id,
+      entityRef: { type: "contact", id: "00000000-0000-4000-8000-000000000202" },
+    };
+    const update: UpdateMeetingCard = {
+      id: "action-update-interview",
+      type: "update_meeting",
+      title: "Add me to the interview",
+      confidence: 0.92,
+      evidenceRefs: ["evidence-meeting"],
+      editableFields: ["participantNames"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        meetingId: "meeting-interview",
+        displayTitle: "HR interview",
+        participantNames: ["Me"],
+        changes: [{ field: "notes", previousValue: null, nextValue: "Bring portfolio." }],
+      },
+    };
+    const existingMeeting: MeetingRecord = {
+      id: "00000000-0000-4000-8000-000000000203",
+      externalEventId: "meeting-interview",
+      title: "HR interview",
+      timezone: "Asia/Shanghai",
+      allDay: false,
+      participantContactIds: ["00000000-0000-4000-8000-000000000204"],
+      status: "active",
+      source: "trace",
+      createdAt: "2026-08-26T03:30:00.000Z",
+      updatedAt: "2026-08-26T03:30:00.000Z",
+    };
+
+    const linked = linkContactsToMeetingAction(
+      update,
+      [selfAction, update],
+      [selfResult],
+      [],
+      existingMeeting,
+    );
+
+    expect(linked.type).toBe("update_meeting");
+    if (linked.type === "update_meeting") {
+      expect(linked.payload.changes).toContainEqual({
+        field: "participantContactIds",
+        previousValue: existingMeeting.participantContactIds,
+        nextValue: [...existingMeeting.participantContactIds, selfResult.entityRef?.id],
+      });
     }
   });
 });

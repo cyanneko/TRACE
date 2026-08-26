@@ -1,5 +1,6 @@
 import {
   EntityMemorySchema,
+  type CreateContactCard,
   type CreateMeetingCard,
   type MemoryEntry,
   type UpdateMeetingCard,
@@ -188,6 +189,52 @@ describe("WebEntityRepository", () => {
     expect(memories[0]?.content).toBe("Send the deck before the review.");
   });
 
+  it("keeps only the latest action-created contact marked as self", async () => {
+    const entities = repository(memoryStore());
+    const selfAction = (id: string, displayName: string): CreateContactCard => ({
+      id,
+      type: "create_contact",
+      title: `Create ${displayName}`,
+      confidence: 1,
+      evidenceRefs: ["evidence-self"],
+      editableFields: ["displayName", "isSelf"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        displayName,
+        givenName: displayName,
+        familyName: "",
+        company: "",
+        jobTitle: "",
+        phones: [],
+        emails: [],
+        notes: "",
+        isSelf: true,
+        interactionSummary: "",
+      },
+    });
+    const first = selfAction("create-self-first", "Old self");
+    const second = selfAction("create-self-second", "Kai");
+
+    for (const [index, action] of [first, second].entries()) {
+      await entities.commitSuccessfulAction({
+        sourceRunId: `20000000-0000-4000-8000-00000000001${index}`,
+        action,
+        result: {
+          actionId: action.id,
+          success: true,
+          provider: "demo",
+          externalId: `demo-${action.id}`,
+        },
+        timezone: "Asia/Shanghai",
+      });
+    }
+
+    const contacts = await entities.listContacts();
+    expect(contacts.filter((contact) => contact.isSelf)).toHaveLength(1);
+    expect(contacts.find((contact) => contact.isSelf)?.displayName).toBe("Kai");
+  });
+
   it("updates a meeting participant relationship with a local contact id", async () => {
     const entities = repository(memoryStore());
     const contact = await entities.createContactDraft();
@@ -206,6 +253,7 @@ describe("WebEntityRepository", () => {
       payload: {
         meetingId: meeting.id,
         displayTitle: "Design review",
+        participantNames: [],
         changes: [
           {
             field: "participantContactIds",

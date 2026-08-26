@@ -41,6 +41,23 @@ describe("analysis entity context", () => {
     ]);
   });
 
+  it("exposes the local self-contact marker to the analysis agent", () => {
+    const self: ContactRecord = {
+      id: "00000000-0000-4000-8000-000000000011",
+      displayName: "Kai",
+      phones: [],
+      emails: [],
+      isSelf: true,
+      status: "active",
+      source: "trace",
+      ...timestamps,
+    };
+
+    expect(mergeContactContext([], [self])).toContainEqual(
+      expect.objectContaining({ id: self.id, displayName: "Kai", isSelf: true }),
+    );
+  });
+
   it("keeps local participant links when merging the corresponding calendar event", () => {
     const local: MeetingRecord = {
       id: "00000000-0000-4000-8000-000000000002",

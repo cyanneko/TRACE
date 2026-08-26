@@ -129,6 +129,7 @@ export const UpdateMeetingCardSchema = ActionCardBaseSchema.extend({
   payload: z.object({
     meetingId: z.string().trim().nullable(),
     displayTitle: NonEmptyStringSchema,
+    participantNames: z.array(NonEmptyStringSchema).default([]),
     changes: z.array(MeetingChangeSchema).min(1),
   }),
 });
@@ -217,6 +218,7 @@ export const ContactSummarySchema = z.object({
   jobTitle: z.string(),
   phones: z.array(z.string()),
   emails: z.array(z.string()),
+  isSelf: z.boolean().optional(),
 });
 
 export const ContactRecordSchema = z
@@ -320,6 +322,7 @@ export const FixtureIdSchema = z.enum([
   "new-contact",
   "update-contact",
   "contact-meeting",
+  "self-meeting",
   "many-actions",
   "no-action",
 ]);

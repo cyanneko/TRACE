@@ -317,6 +317,7 @@ export class SqliteEntityRepository implements EntityRepository {
     });
 
     await database.withExclusiveTransactionAsync(async (transaction) => {
+      for (const demoted of effects.demotedContacts) await this.writeContact(transaction, demoted);
       if (effects.contact) await this.writeContact(transaction, effects.contact);
       if (effects.meeting) await this.writeMeeting(transaction, effects.meeting);
       for (const memory of effects.memories) await this.writeMemory(transaction, memory);

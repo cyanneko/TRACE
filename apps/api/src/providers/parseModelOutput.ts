@@ -135,12 +135,15 @@ function normalizeModelOutput(value: unknown): unknown {
       if (payload.isSelf === null) payload.isSelf = false;
     }
 
-    if (action.type === "update_meeting" && Array.isArray(payload.changes)) {
-      for (const changeValue of payload.changes) {
-        const change = asRecord(changeValue);
-        if (change?.field === "startAt" || change?.field === "endAt") {
-          change.previousValue = normalizeTimestamp(change.previousValue);
-          change.nextValue = normalizeTimestamp(change.nextValue);
+    if (action.type === "update_meeting") {
+      if (payload.participantNames === null) payload.participantNames = [];
+      if (Array.isArray(payload.changes)) {
+        for (const changeValue of payload.changes) {
+          const change = asRecord(changeValue);
+          if (change?.field === "startAt" || change?.field === "endAt") {
+            change.previousValue = normalizeTimestamp(change.previousValue);
+            change.nextValue = normalizeTimestamp(change.nextValue);
+          }
         }
       }
     }

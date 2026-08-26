@@ -461,6 +461,32 @@ npx expo export --platform ios
 
 Commit: `fix(capture): remove screenshots and recover participant matches`
 
+## Iteration 19 - Self Contact and Meeting Participants
+
+Status: completed
+
+- [x] Preserve Iteration 18 as `iteration-18-screenshot-removal-provider-recovery` before editing.
+- [x] Mark the user's own contact explicitly with `isSelf` in analysis context and action cards.
+- [x] Allow the agent to propose a minimal editable self contact when a meeting includes the user.
+- [x] Confirm contact actions before meeting actions and resolve `Me`, `我`, and grounded names only after successful writes.
+- [x] Link both newly created and existing contacts into create-meeting and update-meeting actions.
+- [x] Keep only one action-created contact marked as self while preserving older contact records.
+- [x] Expose pending participant names for review and editing before confirmation.
+- [x] Reconcile external contact IDs with local UUIDs so earlier meeting memory remains available to later contact insights.
+- [x] Add a deterministic Me + HR Fixture and browser coverage for two contacts joining one meeting.
+- [x] Verify the contact and meeting review stages at iPhone width in WSL Chromium.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(agent): model and link self participants`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

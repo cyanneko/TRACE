@@ -186,6 +186,47 @@ test("description-only analysis confirms contacts before meetings and links part
   await expect(page.getByText("Unknown contact", { exact: true })).toHaveCount(0);
 });
 
+test("self and HR contacts are confirmed before both join the meeting", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByLabel("Describe the conversation")
+    .fill("我叫 Kai。Lina HR 约我明天下午两点面试，请创建我们并把两个人都加入会议。");
+  await page.getByText("Me + HR", { exact: true }).click();
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+
+  await expect(page.getByText("创建我的联系人", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("This contact is me: Kai")).toBeChecked();
+  await page.getByRole("button", { name: "Confirm contacts and continue" }).click();
+
+  await expect(page.getByText("创建 HR 面试", { exact: true })).toBeVisible();
+  await expect(page.locator('input[value="Me, Lina HR"]')).toBeVisible();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+  await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
+
+  const linked = await page.evaluate(() => {
+    const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<{ displayName: string; id: string; isSelf: boolean }>;
+      meetings?: Array<{ participantContactIds: string[]; title: string }>;
+    };
+    const self = entities.contacts?.find((contact) => contact.isSelf);
+    const hr = entities.contacts?.find((contact) => contact.displayName === "Lina HR");
+    const meeting = entities.meetings?.find((item) => item.title === "与 Lina HR 的面试");
+    return {
+      hrId: hr?.id,
+      participants: meeting?.participantContactIds,
+      selfId: self?.id,
+      selfName: self?.displayName,
+    };
+  });
+  expect(linked.selfName).toBe("Kai");
+  expect(linked.participants?.sort()).toEqual([linked.selfId, linked.hrId].sort());
+
+  await page.getByRole("tab", { name: "Meetings" }).click();
+  await page.getByLabel("Open 与 Lina HR 的面试").click();
+  await expect(page.getByLabel("Open Kai")).toBeVisible();
+  await expect(page.getByLabel("Open Lina HR")).toBeVisible();
+});
+
 test("a successful analysis clears a stale offline health indicator", async ({ page }) => {
   await page.route("**/health", (route) => route.abort("connectionrefused"));
   await page.goto("/");

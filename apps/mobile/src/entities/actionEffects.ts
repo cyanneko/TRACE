@@ -13,6 +13,7 @@ import type { CommitSuccessfulActionInput } from "./types";
 
 export type ActionEntityEffects = {
   contact?: ContactRecord;
+  demotedContacts: ContactRecord[];
   meeting?: MeetingRecord;
   memories: EntityMemory[];
   entityRef: {
@@ -136,9 +137,13 @@ function meetingEffects(
       timezone: action.payload.timezone,
       allDay: false,
       notes: action.payload.notes || undefined,
-      participantContactIds: action.payload.participantContactIds.map(
-        (id) => findContact(state.contacts, id)?.id ?? id,
-      ),
+      participantContactIds: [
+        ...new Set(
+          action.payload.participantContactIds.map(
+            (id) => findContact(state.contacts, id)?.id ?? id,
+          ),
+        ),
+      ],
       status: "active",
       source,
       createdAt: existing?.createdAt ?? now,
@@ -179,7 +184,9 @@ function meetingEffects(
     if (change.field === "meetingLink") meeting.meetingLink = change.nextValue ?? undefined;
     if (change.field === "notes") meeting.notes = change.nextValue ?? undefined;
     if (change.field === "participantContactIds") {
-      meeting.participantContactIds = change.nextValue.map((id) => findContact(state.contacts, id)?.id ?? id);
+      meeting.participantContactIds = [
+        ...new Set(change.nextValue.map((id) => findContact(state.contacts, id)?.id ?? id)),
+      ];
     }
   }
   return MeetingRecordSchema.parse(meeting);
@@ -224,8 +231,22 @@ export function deriveActionEntityEffects(
     ? { type: "contact" as const, id: contact.id, externalId: contact.externalContactId }
     : { type: "meeting" as const, id: meeting!.id, externalId: meeting!.externalEventId };
 
+  const demotedContacts =
+    contact?.isSelf
+      ? state.contacts
+          .filter((item) => item.id !== contact.id && item.isSelf)
+          .map((item) =>
+            ContactRecordSchema.parse({ ...item, isSelf: false, updatedAt: contact.updatedAt }),
+          )
+      : [];
+  const demotedById = new Map(demotedContacts.map((item) => [item.id, item]));
   const contacts = contact
-    ? [...state.contacts.filter((item) => item.id !== contact.id), contact]
+    ? [
+        ...state.contacts
+          .filter((item) => item.id !== contact.id)
+          .map((item) => demotedById.get(item.id) ?? item),
+        contact,
+      ]
     : state.contacts;
   const meetings = meeting
     ? [...state.meetings.filter((item) => item.id !== meeting.id), meeting]
@@ -287,5 +308,5 @@ export function deriveActionEntityEffects(
     }
   }
 
-  return { contact, meeting, memories, entityRef, skippedMemoryProposals };
+  return { contact, demotedContacts, meeting, memories, entityRef, skippedMemoryProposals };
 }

@@ -8,7 +8,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import type { ComponentType } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { colors } from "../theme";
 import { DateTimeField } from "./DateTimeField";
@@ -35,6 +35,7 @@ export function ActionCardView({ card, evidence, onChange, onToggle, selected }:
   const meta = cardMeta[card.type];
   const Icon = meta.icon;
   const confidence = Math.round(card.confidence * 100);
+  const kindLabel = card.type === "create_contact" && card.payload.isSelf ? "My contact" : meta.label;
 
   return (
     <View style={[styles.card, !selected && styles.cardUnselected]}>
@@ -57,7 +58,7 @@ export function ActionCardView({ card, evidence, onChange, onToggle, selected }:
           <Icon color={colors.blue} size={19} strokeWidth={2} />
         </View>
         <View style={styles.headerCopy}>
-          <Text style={styles.kind}>{meta.label}</Text>
+          <Text style={styles.kind}>{kindLabel}</Text>
           <Text style={styles.title}>{card.title}</Text>
         </View>
         <View style={[styles.confidence, confidence < 80 && styles.confidenceCaution]}>
@@ -139,6 +140,22 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
           />
         </View>
         <Field
+          label="Participants to link"
+          onChangeText={(participantNames) =>
+            onChange({
+              ...card,
+              payload: {
+                ...card.payload,
+                participantNames: participantNames
+                  .split(",")
+                  .map((name) => name.trim())
+                  .filter(Boolean),
+              },
+            })
+          }
+          value={card.payload.participantNames.join(", ")}
+        />
+        <Field
           label="Notes"
           multiline
           onChangeText={(notes) => onChange({ ...card, payload: { ...card.payload, notes } })}
@@ -156,6 +173,21 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
           onChangeText={(displayName) => onChange({ ...card, payload: { ...card.payload, displayName } })}
           value={card.payload.displayName}
         />
+        <View style={styles.toggleRow}>
+          <View>
+            <Text style={styles.toggleTitle}>This is me</Text>
+            <Text style={styles.toggleMeta}>Self contact</Text>
+          </View>
+          <Switch
+            accessibilityLabel={`This contact is me: ${card.payload.displayName}`}
+            onValueChange={(isSelf) =>
+              onChange({ ...card, payload: { ...card.payload, isSelf } })
+            }
+            thumbColor="#FFFFFF"
+            trackColor={{ false: colors.border, true: colors.primary }}
+            value={card.payload.isSelf}
+          />
+        </View>
         <View style={styles.fieldRow}>
           <Field
             label="Company"
@@ -197,6 +229,22 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
     return (
       <View style={styles.fields}>
         <Field label="Meeting" onChangeText={() => undefined} readOnly value={card.payload.displayTitle} />
+        <Field
+          label="Participants to link"
+          onChangeText={(participantNames) =>
+            onChange({
+              ...card,
+              payload: {
+                ...card.payload,
+                participantNames: participantNames
+                  .split(",")
+                  .map((name) => name.trim())
+                  .filter(Boolean),
+              },
+            })
+          }
+          value={card.payload.participantNames.join(", ")}
+        />
         {card.payload.changes.map((change, index) => (
           <View key={`${change.field}-${index}`} style={styles.changeRow}>
             <View style={styles.changeLabel}>
@@ -395,6 +443,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
+  },
+  toggleRow: {
+    alignItems: "center",
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 6,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 54,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  toggleTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  toggleMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   field: {
     flex: 1,

@@ -127,6 +127,7 @@ describe("ActionCardSchema", () => {
       payload: {
         meetingId: "meeting-design-review",
         displayTitle: "Design review",
+        participantNames: [],
         changes: [
           {
             field: "startAt",

@@ -134,6 +134,27 @@ describe("POST /v1/analyze", () => {
     ]);
   });
 
+  it("returns an explicit self contact when the user must join a meeting", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        ...validPayload,
+        fixtureId: "self-meeting",
+        note: "I am Kai. Add Lina HR and me to tomorrow's interview.",
+        screenshotDataUrl: undefined,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().actionCards).toContainEqual(
+      expect.objectContaining({
+        type: "create_contact",
+        payload: expect.objectContaining({ displayName: "Kai", isSelf: true }),
+      }),
+    );
+  });
+
   it("rejects a request without a screenshot or description", async () => {
     const response = await createServer().inject({
       method: "POST",

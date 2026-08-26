@@ -11,13 +11,42 @@ function validEvidenceRefs(input: InsightRequest, action: ActionCard): string[] 
   return fallback ? [fallback] : [];
 }
 
+function contactIdsForAction(input: InsightRequest, action: ActionCard): string[] {
+  const ids = new Set<string>();
+  if (action.type === "create_meeting") {
+    action.payload.participantContactIds.forEach((id) => ids.add(id));
+  }
+  if (action.type === "update_contact" && action.payload.contactId) {
+    ids.add(action.payload.contactId);
+  }
+  if (action.type === "update_meeting") {
+    action.payload.changes.forEach((change) => {
+      if (change.field === "participantContactIds") {
+        change.nextValue.forEach((id) => ids.add(id));
+      }
+    });
+  }
+
+  const result = input.toolResults.find(
+    (candidate) => candidate.success && candidate.actionId === action.id,
+  );
+  if (result?.entityRef?.type === "contact") {
+    ids.add(result.entityRef.id);
+    if (result.entityRef.externalId) ids.add(result.entityRef.externalId);
+  }
+  if ((action.type === "create_contact" || action.type === "update_contact") && result?.externalId) {
+    ids.add(result.externalId);
+  }
+  return [...ids];
+}
+
 function memoriesForAction(input: InsightRequest, action: ActionCard): MemoryEntry[] {
+  const contactIds = new Set(contactIdsForAction(input, action));
   return input.memories.filter(
     (memory) =>
       memory.status === "active" &&
       (memory.sourceActionId === action.id ||
-        (action.type === "update_contact" && memory.contactId === action.payload.contactId) ||
-        (action.type === "create_meeting" && action.payload.participantContactIds.includes(memory.contactId ?? ""))),
+        (Boolean(memory.contactId) && contactIds.has(memory.contactId!))),
   );
 }
 
@@ -99,17 +128,7 @@ function continuityInsight(input: InsightRequest, actions: ActionCard[]): Insigh
     return null;
   }
 
-  const relevantContactIds = new Set(
-    actions.flatMap((action) => {
-      if (action.type === "create_meeting") {
-        return action.payload.participantContactIds;
-      }
-      if (action.type === "update_contact") {
-        return action.payload.contactId ? [action.payload.contactId] : [];
-      }
-      return [];
-    }),
-  );
+  const relevantContactIds = new Set(actions.flatMap((action) => contactIdsForAction(input, action)));
   const relevant = priorMemories.filter(
     (memory) => !memory.contactId || relevantContactIds.size === 0 || relevantContactIds.has(memory.contactId),
   );

@@ -54,7 +54,7 @@ import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
 import {
   isContactAction,
   isMeetingAction,
-  linkCreatedContactsToMeeting,
+  linkContactsToMeetingAction,
   orderActionsForExecution,
 } from "./src/execution/actionBatch";
 import { executeAndCommit } from "./src/execution/executeAndCommit";
@@ -442,11 +442,18 @@ export default function App() {
       const stageResults: ToolResult[] = [];
       const executedStageActions: ActionCard[] = [];
       const confirmedBatch = [...stagedActionsRef.current, ...confirmedStageActions];
+      const knownContacts = reviewStage === "meetings" ? await entityRepository.listContacts() : [];
       for (const action of confirmedStageActions) {
-        const executableAction = linkCreatedContactsToMeeting(
+        const existingMeeting =
+          action.type === "update_meeting" && action.payload.meetingId
+            ? await entityRepository.findMeeting(action.payload.meetingId)
+            : null;
+        const executableAction = linkContactsToMeetingAction(
           action,
           confirmedBatch,
           [...stagedResultsRef.current, ...stageResults],
+          knownContacts,
+          existingMeeting,
         );
         executedStageActions.push(executableAction);
         stageResults.push(
@@ -1194,7 +1201,7 @@ function ReviewScreen({
         </View>
 
         <View style={styles.actionsHeading}>
-          <View>
+          <View style={styles.actionsHeadingCopy}>
             <Text style={styles.sectionLabel}>
               {hasContactStage && hasMeetingStage ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
             </Text>
@@ -1209,9 +1216,11 @@ function ReviewScreen({
               <Text style={styles.stageHint}>Confirmed contacts are now available to dependent meetings.</Text>
             ) : null}
           </View>
-          <Text numberOfLines={1} style={styles.runId}>
-            Run {analysis.runId.slice(0, 8)}
-          </Text>
+          {!compact ? (
+            <Text numberOfLines={1} style={styles.runId}>
+              Run {analysis.runId.slice(0, 8)}
+            </Text>
+          ) : null}
         </View>
 
         {stageCards.length > 0 ? (
@@ -1737,6 +1746,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 16,
     justifyContent: "space-between",
+  },
+  actionsHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   actionStageTitle: {
     color: colors.text,

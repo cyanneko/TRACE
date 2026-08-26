@@ -67,6 +67,7 @@ describe("DemoActionExecutor", () => {
       payload: {
         meetingId: "local-meeting-id",
         displayTitle: "Review",
+        participantNames: [],
         changes: [
           {
             field: "startAt",
