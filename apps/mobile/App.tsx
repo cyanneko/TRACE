@@ -22,6 +22,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
@@ -98,6 +99,7 @@ export default function App() {
   const [userVisionProvider, setUserVisionProvider] = useState<UserVisionProvider | null>(null);
   const userVisionProviderRef = useRef<UserVisionProvider | null>(null);
   const settingsRevisionRef = useRef(0);
+  const apiHealthRevisionRef = useRef(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [healthError, setHealthError] = useState(false);
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
@@ -153,6 +155,7 @@ export default function App() {
   useEffect(() => {
     let active = true;
     const settingsRevision = settingsRevisionRef.current;
+    const healthRevision = apiHealthRevisionRef.current;
 
     void providerSettingsRepository
       .load()
@@ -176,14 +179,14 @@ export default function App() {
 
     void getHealth()
       .then((health) => {
-        if (active) {
+        if (active && apiHealthRevisionRef.current === healthRevision) {
           setServerProvider(health.modelProvider);
           setProvider(describeUserVisionProvider(userVisionProviderRef.current, health.modelProvider));
           setHealthError(false);
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && apiHealthRevisionRef.current === healthRevision) {
           setHealthError(true);
         }
       });
@@ -273,6 +276,20 @@ export default function App() {
     }
   }
 
+  function removeScreenshot() {
+    setScreenshot(null);
+    setError(null);
+  }
+
+  function updateApiHealth(error?: unknown) {
+    apiHealthRevisionRef.current += 1;
+    if (error instanceof TraceApiError) {
+      setHealthError(error.code === "API_UNREACHABLE");
+    } else if (error === undefined) {
+      setHealthError(false);
+    }
+  }
+
   async function analyze() {
     if (!screenshot && !note.trim()) {
       setError("Choose a screenshot or describe the conversation.");
@@ -315,6 +332,7 @@ export default function App() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         visionProvider: userVisionProvider ?? undefined,
       });
+      updateApiHealth();
       setAnalysis(result);
       setAnalysisContacts(contacts);
       setActiveMemories(memories);
@@ -330,6 +348,7 @@ export default function App() {
       stagedResultsRef.current = [];
       setPhase("review");
     } catch (analysisError) {
+      updateApiHealth(analysisError);
       setError(
         analysisError instanceof TraceApiError
           ? analysisError.message
@@ -368,17 +387,23 @@ export default function App() {
     results: ToolResult[],
     activeMemories: MemoryEntry[],
   ) {
-    const insightResult = await generateInsights({
-      sourceRunId: currentAnalysis.runId,
-      thread: currentAnalysis.thread,
-      confirmedActions,
-      toolResults: results,
-      memories: activeMemories,
-      contacts: analysisContacts,
-      timezone: timezone(),
-      currentTime: new Date().toISOString(),
-    });
-    dispatchExecution({ type: "INSIGHTS_READY", insights: insightResult });
+    try {
+      const insightResult = await generateInsights({
+        sourceRunId: currentAnalysis.runId,
+        thread: currentAnalysis.thread,
+        confirmedActions,
+        toolResults: results,
+        memories: activeMemories,
+        contacts: analysisContacts,
+        timezone: timezone(),
+        currentTime: new Date().toISOString(),
+      });
+      updateApiHealth();
+      dispatchExecution({ type: "INSIGHTS_READY", insights: insightResult });
+    } catch (insightError) {
+      updateApiHealth(insightError);
+      throw insightError;
+    }
   }
 
   async function confirmSelectedActions() {
@@ -836,6 +861,7 @@ export default function App() {
             onAnalyze={analyze}
             onFixtureChange={setFixtureId}
             onNoteChange={setNote}
+            removeScreenshot={removeScreenshot}
             screenshot={screenshot}
           />
         ) : phase === "review" && analysis ? (
@@ -888,6 +914,7 @@ type CaptureProps = {
   onAnalyze: () => void;
   onFixtureChange: (value: FixtureId) => void;
   onNoteChange: (value: string) => void;
+  removeScreenshot: () => void;
   screenshot: SelectedScreenshot | null;
 };
 
@@ -901,6 +928,7 @@ function CaptureScreen({
   onAnalyze,
   onFixtureChange,
   onNoteChange,
+  removeScreenshot,
   screenshot,
 }: CaptureProps) {
   const { height } = useWindowDimensions();
@@ -936,20 +964,29 @@ function CaptureScreen({
           ]}
         >
           {screenshot ? (
-            <Pressable
-              accessibilityLabel="Replace chat screenshot"
-              onPress={chooseScreenshot}
-              style={({ pressed }) => [
-                styles.uploadFrame,
-                styles.uploadFrameSelected,
-                pressed && styles.uploadFramePressed,
-              ]}
-            >
+            <View style={[styles.uploadFrame, styles.uploadFrameSelected]}>
               <Image resizeMode="contain" source={{ uri: screenshot.uri }} style={previewImageStyle} />
-              <View style={styles.replaceAffordance}>
-                <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
+              <View style={styles.screenshotActions}>
+                <Pressable
+                  accessibilityLabel="Replace chat screenshot"
+                  onPress={chooseScreenshot}
+                  style={({ pressed }) => [styles.screenshotAction, pressed && styles.screenshotActionPressed]}
+                >
+                  <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Remove chat screenshot"
+                  onPress={removeScreenshot}
+                  style={({ pressed }) => [
+                    styles.screenshotAction,
+                    styles.removeScreenshotAction,
+                    pressed && styles.screenshotActionPressed,
+                  ]}
+                >
+                  <X color={colors.danger} size={20} strokeWidth={2.1} />
+                </Pressable>
               </View>
-            </Pressable>
+            </View>
           ) : (
             <View style={styles.threadComposer}>
               <Pressable
@@ -1443,7 +1480,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     lineHeight: 25,
   },
-  replaceAffordance: {
+  screenshotActions: {
+    flexDirection: "row",
+    gap: 8,
+    position: "absolute",
+    right: 12,
+    top: 12,
+  },
+  screenshotAction: {
     alignItems: "center",
     backgroundColor: "rgba(255, 255, 255, 0.94)",
     borderColor: colors.border,
@@ -1451,10 +1495,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 40,
     justifyContent: "center",
-    position: "absolute",
-    right: 12,
-    top: 12,
     width: 40,
+  },
+  removeScreenshotAction: {
+    backgroundColor: "rgba(249, 231, 231, 0.96)",
+    borderColor: "#EBC4C4",
+  },
+  screenshotActionPressed: {
+    opacity: 0.72,
   },
   inputGroup: {
     gap: 7,

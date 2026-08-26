@@ -25,6 +25,7 @@ export function buildAnalyzePrompt(input: AnalyzeRequest): string {
     "Resolve relative dates using currentTime and timezone only when the supplied conversation context has enough information. Otherwise use null and add a risk flag.",
     "All startAt and endAt values must be UTC ISO 8601 timestamps ending in Z. Convert local times using the supplied timezone.",
     "For a new person, propose create_contact when a supplied name, handle, or stable alias directly interacts with the user through a reply, agreement, invitation, task, information exchange, or follow-up intent.",
+    "For each thread participant, use a supplied contact ID only when the match is grounded. Omit contactId entirely when unmatched; never return contactId as null or an empty string.",
     "A create_contact payload requires only displayName. Keep unknown optional identity fields as empty strings or arrays. Do not create contacts for people merely mentioned, forwarded content, system accounts, bots, or the user themself.",
     "When a possible existing contact is ambiguous, add possible_duplicate to riskFlags rather than pretending the match is certain.",
     "An update_contact action needs an unambiguous contactId from context; otherwise set contactId to null and add a risk flag.",

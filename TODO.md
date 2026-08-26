@@ -436,6 +436,31 @@ npx expo export --platform ios
 
 Commit: `feat(workflow): link contact and meeting confirmations`
 
+## Iteration 18 - Screenshot Removal and Provider Recovery
+
+Status: completed
+
+- [x] Preserve Iteration 17 as `iteration-17-dependent-contact-meeting-flow` before editing.
+- [x] Split screenshot controls into explicit replace and remove buttons.
+- [x] Preserve entered context when an image is removed so it becomes the primary description.
+- [x] Normalize null or empty unmatched participant `contactId` values by omitting the field.
+- [x] Tell vision providers to omit unmatched participant IDs instead of returning null.
+- [x] Clear a stale Analyzer offline state after any reachable analyze or insight API response.
+- [x] Keep the offline state only for an actually unreachable API.
+- [x] Add parser and browser regressions for the reported provider response and health-state recovery.
+- [x] Verify the two screenshot controls at iPhone width in WSL Chromium.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `fix(capture): remove screenshots and recover participant matches`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

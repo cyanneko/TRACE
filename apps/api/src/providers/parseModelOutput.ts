@@ -84,6 +84,14 @@ function normalizeModelOutput(value: unknown): unknown {
     for (const field of ["participants", "evidence", "uncertainties"] as const) {
       if (thread[field] === null) thread[field] = [];
     }
+    if (Array.isArray(thread.participants)) {
+      for (const participantValue of thread.participants) {
+        const participant = asRecord(participantValue);
+        if (participant && (participant.contactId === null || participant.contactId === "")) {
+          delete participant.contactId;
+        }
+      }
+    }
   }
   if (!Array.isArray(output.actionCards)) return value;
 

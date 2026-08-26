@@ -121,6 +121,32 @@ describe("parseAnalyzeOutputWithRepair", () => {
     });
   });
 
+  it("omits a null contact match from an unmatched thread participant", async () => {
+    const repair = vi.fn();
+    const result = await parseAnalyzeOutputWithRepair({
+      initial: async () =>
+        JSON.stringify({
+          thread: {
+            summary: "Maya and a new candidate discussed an interview.",
+            participants: [
+              { displayName: "Maya", contactId: "contact-maya", confidence: 0.96 },
+              { displayName: "Candidate", contactId: null, confidence: 0.88 },
+            ],
+            evidence: [{ id: "interview", quote: "See you at the interview." }],
+            uncertainties: [],
+          },
+          actionCards: [],
+        }),
+      repair,
+    });
+
+    expect(result.thread.participants).toEqual([
+      { displayName: "Maya", contactId: "contact-maya", confidence: 0.96 },
+      { displayName: "Candidate", confidence: 0.88 },
+    ]);
+    expect(repair).not.toHaveBeenCalled();
+  });
+
   it("repairs invalid JSON once", async () => {
     const repair = vi.fn(async () => JSON.stringify(getAnalyzeFixture("new-contact")));
 

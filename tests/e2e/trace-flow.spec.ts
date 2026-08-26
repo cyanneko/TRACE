@@ -130,6 +130,19 @@ test("mobile no-action state stays conservative and within the viewport", async 
   expect(widths.body).toBe(widths.viewport);
 });
 
+test("a selected screenshot can be removed without discarding its description", async ({ page }) => {
+  await page.goto("/");
+  await uploadScreenshot(page);
+  await page.getByPlaceholder("Anything the screenshot leaves out?").fill("The interview is about Aihola.");
+
+  await page.getByLabel("Remove chat screenshot").click();
+
+  await expect(page.getByLabel("Replace chat screenshot")).toHaveCount(0);
+  await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Describe the conversation")).toHaveValue("The interview is about Aihola.");
+  await expect(page.getByRole("button", { name: "Analyze thread" })).toBeVisible();
+});
+
 test("description-only analysis confirms contacts before meetings and links participants", async ({ page }) => {
   await page.goto("/");
   const composer = page.getByLabel("Describe the conversation");
@@ -171,6 +184,18 @@ test("description-only analysis confirms contacts before meetings and links part
   await page.getByLabel("Open 与林乔的合作沟通").click();
   await expect(page.getByText("林乔", { exact: true })).toBeVisible();
   await expect(page.getByText("Unknown contact", { exact: true })).toHaveCount(0);
+});
+
+test("a successful analysis clears a stale offline health indicator", async ({ page }) => {
+  await page.route("**/health", (route) => route.abort("connectionrefused"));
+  await page.goto("/");
+  await expect(page.getByText("Analyzer offline", { exact: true })).toBeVisible();
+
+  await uploadScreenshot(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+
+  await expect(page.getByText("Confirm what TRACE understood", { exact: true })).toBeVisible();
+  await expect(page.getByText("Analyzer offline", { exact: true })).toHaveCount(0);
 });
 
 test("provider settings persist locally and can be cleared", async ({ page }) => {
