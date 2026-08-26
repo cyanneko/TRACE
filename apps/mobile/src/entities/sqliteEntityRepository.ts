@@ -165,6 +165,14 @@ export class SqliteEntityRepository implements EntityRepository {
     return parseRows(rows, (input) => EntityMemorySchema.safeParse(input));
   }
 
+  async listAllMemories(): Promise<EntityMemory[]> {
+    const database = await this.database();
+    const rows = await database.getAllAsync<PayloadRow>(
+      "SELECT payload FROM entity_memories WHERE status = 'active' ORDER BY updated_at DESC",
+    );
+    return parseRows(rows, (input) => EntityMemorySchema.safeParse(input));
+  }
+
   async addMemory(input: ManualMemoryInput): Promise<EntityMemory> {
     const database = await this.database();
     await this.assertOwnerExists(database, input);

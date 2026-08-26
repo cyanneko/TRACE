@@ -32,6 +32,7 @@ export interface EntityRepository {
   deleteMeeting(meetingId: string): Promise<void>;
 
   listMemories(owner: EntityOwner): Promise<EntityMemory[]>;
+  listAllMemories(): Promise<EntityMemory[]>;
   addMemory(input: ManualMemoryInput): Promise<EntityMemory>;
   updateMemory(memoryId: string, patch: Pick<ManualMemoryInput, "content" | "kind">): Promise<EntityMemory>;
   deleteMemory(memoryId: string): Promise<void>;

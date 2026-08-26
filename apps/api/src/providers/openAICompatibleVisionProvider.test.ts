@@ -9,7 +9,9 @@ import { OpenAICompatibleVisionProvider } from "./openAICompatibleVisionProvider
 const input: AnalyzeRequest = {
   contacts: [],
   currentTime: "2026-08-26T03:30:00.000Z",
+  entityMemories: [],
   memories: [],
+  meetings: [],
   note: "",
   screenshotDataUrl:
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",

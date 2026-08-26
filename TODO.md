@@ -339,6 +339,28 @@ npm run build:web
 
 Commit: `feat(execution): commit successful actions to entity memory`
 
+## Iteration 14 - Entity-Grounded Vision Planning
+
+Status: completed
+
+- [x] Add existing meetings and entity-owned Memory to the analysis contract.
+- [x] Add Demo and native iOS meeting sources with a bounded calendar window.
+- [x] Merge local entity IDs with current system contact and calendar context.
+- [x] Remove the three-action Prompt limit and request every distinct grounded action.
+- [x] Add direct-interaction rules for minimal new-contact proposals.
+- [x] Add update-meeting matching, participant, ambiguity, and Memory Proposal rules.
+- [x] Preserve legacy request Memory while clients transition to entity-owned Memory.
+- [x] Add Prompt and context-merge regression tests.
+
+Completion check:
+
+```bash
+npm run typecheck
+npm test
+```
+
+Commit: `feat(agent): ground analysis in meeting and entity memory`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

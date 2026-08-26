@@ -136,6 +136,10 @@ export class WebEntityRepository implements EntityRepository {
     );
   }
 
+  async listAllMemories(): Promise<EntityMemory[]> {
+    return this.read().memories.filter((memory) => memory.status === "active");
+  }
+
   async addMemory(input: ManualMemoryInput): Promise<EntityMemory> {
     const store = this.read();
     this.assertOwnerExists(store, input);

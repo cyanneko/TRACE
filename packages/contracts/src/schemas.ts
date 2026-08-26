@@ -284,6 +284,20 @@ export const MeetingRecordSchema = z
 
 export const MeetingStateSchema = z.enum(["ongoing", "upcoming", "ended", "time_unresolved"]);
 
+export const MeetingSummarySchema = z.object({
+  id: NonEmptyStringSchema,
+  externalEventId: z.string().trim().optional(),
+  title: NonEmptyStringSchema,
+  startAt: z.iso.datetime().nullable(),
+  endAt: z.iso.datetime().nullable(),
+  timezone: NonEmptyStringSchema,
+  allDay: z.boolean(),
+  location: z.string().default(""),
+  meetingLink: z.string().default(""),
+  notes: z.string().default(""),
+  participantContactIds: z.array(NonEmptyStringSchema),
+});
+
 export const EntityMemorySchema = z.object({
   id: z.uuid(),
   ownerType: z.enum(["contact", "meeting"]),
@@ -317,6 +331,8 @@ export const AnalyzeRequestSchema = z.object({
   note: z.string().trim().max(2_000).default(""),
   contacts: z.array(ContactSummarySchema).max(200).default([]),
   memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
+  meetings: z.array(MeetingSummarySchema).max(200).default([]),
+  entityMemories: z.array(EntityMemorySchema).max(300).default([]),
   timezone: z.string().trim().min(1).max(100),
   currentTime: z.iso.datetime(),
   fixtureId: FixtureIdSchema.optional(),
@@ -431,6 +447,7 @@ export type ContactSummary = z.infer<typeof ContactSummarySchema>;
 export type ContactRecord = z.infer<typeof ContactRecordSchema>;
 export type MeetingRecord = z.infer<typeof MeetingRecordSchema>;
 export type MeetingState = z.infer<typeof MeetingStateSchema>;
+export type MeetingSummary = z.infer<typeof MeetingSummarySchema>;
 export type EntityMemory = z.infer<typeof EntityMemorySchema>;
 export type FixtureId = z.infer<typeof FixtureIdSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;

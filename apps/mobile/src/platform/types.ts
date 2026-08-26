@@ -2,6 +2,7 @@ import type { ContactSource } from "../contacts/types";
 import type { EntityRepository } from "../entities/types";
 import type { ActionExecutor } from "../execution/types";
 import type { MemoryRepository } from "../memory/types";
+import type { MeetingSource } from "../meetings/types";
 
 export type PlatformCapabilities = {
   actions: "demo" | "native";
@@ -16,5 +17,6 @@ export type PlatformServices = {
   entities: EntityRepository;
   executor: ActionExecutor;
   memories: MemoryRepository;
+  meetings: MeetingSource;
   capabilities: PlatformCapabilities;
 };
