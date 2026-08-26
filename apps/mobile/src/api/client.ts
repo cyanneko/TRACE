@@ -11,6 +11,7 @@ import { Platform } from "react-native";
 
 const fallbackApiUrl = Platform.OS === "web" ? "http://127.0.0.1:8787" : "http://localhost:8787";
 const apiUrl = (process.env.EXPO_PUBLIC_API_URL ?? fallbackApiUrl).replace(/\/$/, "");
+const requestTimeoutMs = 115_000;
 
 export class TraceApiError extends Error {
   readonly code: string;
@@ -32,7 +33,7 @@ type HealthResponse = {
 
 async function request(path: string, init?: RequestInit) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45_000);
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   try {
     return await fetch(`${apiUrl}${path}`, {

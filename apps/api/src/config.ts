@@ -1,4 +1,8 @@
-import { VISION_PROVIDER_PRESETS, type UserVisionProvider } from "@trace/contracts";
+import {
+  VISION_PROVIDER_PRESETS,
+  type UserVisionProvider,
+  type VisionThinkingMode,
+} from "@trace/contracts";
 import { z } from "zod";
 
 const OptionalNonEmptyStringSchema = z.preprocess(
@@ -57,6 +61,7 @@ export type VisionProviderConfig = {
   imageFormat: "base64" | "data-url";
   jsonMode: boolean;
   model: string;
+  thinking?: VisionThinkingMode;
 };
 
 type VisionProviderSelection = {
@@ -88,6 +93,7 @@ function resolveRemoteVisionProviderConfig(selection: VisionProviderSelection): 
     imageFormat: selection.imageFormat ?? preset?.imageFormat ?? "data-url",
     jsonMode: selection.jsonMode ?? preset?.jsonMode ?? false,
     model,
+    thinking: preset?.thinking,
   };
 }
 

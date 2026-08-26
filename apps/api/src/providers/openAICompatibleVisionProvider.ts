@@ -1,21 +1,42 @@
 import type { AnalyzeRequest } from "@trace/contracts";
-import OpenAI from "openai";
+import OpenAI, { APIConnectionTimeoutError } from "openai";
 
 import type { VisionProviderConfig } from "../config.js";
 import { buildAnalyzePrompt, buildRepairPrompt } from "../prompts/analyze.js";
 import type { ModelProvider } from "./modelProvider.js";
+import { ModelOutputTruncatedError, ModelProviderTimeoutError } from "./modelProviderErrors.js";
 import { parseAnalyzeOutputWithRepair } from "./parseModelOutput.js";
+
+const defaultCompletionTimeoutMs = 55_000;
+const defaultAnalysisTimeoutMs = 100_000;
+
+type ProviderRuntimeOptions = {
+  analysisTimeoutMs?: number;
+  completionTimeoutMs?: number;
+};
+
+type CompletionRequest = OpenAI.ChatCompletionCreateParamsNonStreaming & {
+  thinking?: {
+    type: "disabled" | "enabled";
+  };
+};
 
 export class OpenAICompatibleVisionProvider implements ModelProvider {
   readonly info;
 
   private readonly client: OpenAI;
   private readonly config: VisionProviderConfig;
+  private readonly analysisTimeoutMs: number;
+  private readonly completionTimeoutMs: number;
 
-  constructor(config: VisionProviderConfig) {
+  constructor(config: VisionProviderConfig, runtime: ProviderRuntimeOptions = {}) {
+    this.analysisTimeoutMs = runtime.analysisTimeoutMs ?? defaultAnalysisTimeoutMs;
+    this.completionTimeoutMs = runtime.completionTimeoutMs ?? defaultCompletionTimeoutMs;
     this.client = new OpenAI({
       apiKey: config.apiKey,
       baseURL: config.baseURL,
+      maxRetries: 0,
+      timeout: this.completionTimeoutMs,
     });
     this.config = config;
     this.info = {
@@ -26,13 +47,19 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
   }
 
   async analyze(input: AnalyzeRequest) {
+    const deadline = Date.now() + this.analysisTimeoutMs;
     return parseAnalyzeOutputWithRepair({
-      initial: () => this.complete(input, buildAnalyzePrompt(input)),
-      repair: (invalidOutput) => this.complete(input, buildRepairPrompt(input, invalidOutput)),
+      initial: () => this.complete(input, buildAnalyzePrompt(input), deadline),
+      repair: (invalidOutput) => this.complete(input, buildRepairPrompt(input, invalidOutput), deadline),
     });
   }
 
-  private async complete(input: AnalyzeRequest, prompt: string): Promise<string> {
+  private async complete(input: AnalyzeRequest, prompt: string, deadline: number): Promise<string> {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      throw new ModelProviderTimeoutError();
+    }
+
     const imageUrl =
       this.config.imageFormat === "base64"
         ? input.screenshotDataUrl.slice(input.screenshotDataUrl.indexOf(",") + 1)
@@ -46,7 +73,7 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
         }
       : {};
 
-    const response = await this.client.chat.completions.create({
+    const request: CompletionRequest = {
       model: this.config.model,
       messages: [
         {
@@ -70,10 +97,28 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
           ],
         },
       ],
-      max_tokens: 4_096,
+      max_tokens: 8_192,
       ...responseFormat,
-    });
+      ...(this.config.thinking ? { thinking: { type: this.config.thinking } } : {}),
+    };
 
-    return response.choices[0]?.message.content ?? "";
+    let response;
+    try {
+      response = await this.client.chat.completions.create(request, {
+        timeout: Math.min(remainingMs, this.completionTimeoutMs),
+      });
+    } catch (error) {
+      if (error instanceof APIConnectionTimeoutError) {
+        throw new ModelProviderTimeoutError({ cause: error });
+      }
+      throw error;
+    }
+
+    const choice = response.choices[0];
+    if (choice?.finish_reason === "length") {
+      throw new ModelOutputTruncatedError(response.usage?.completion_tokens);
+    }
+
+    return choice?.message.content ?? "";
   }
 }

@@ -34,6 +34,7 @@ describe("vision provider configuration", () => {
       imageFormat: "data-url",
       jsonMode: true,
       model: "deepseek-v4-flash-vision-exp",
+      thinking: "disabled",
     });
   });
 

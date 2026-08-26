@@ -1,6 +1,7 @@
 import type { VisionImageDetail, VisionImageFormat } from "./schemas.js";
 
 export type VisionProviderPresetId = "deepseek" | "doubao" | "glm";
+export type VisionThinkingMode = "disabled" | "enabled";
 
 export type VisionProviderPreset = {
   baseURL: string;
@@ -9,6 +10,7 @@ export type VisionProviderPreset = {
   jsonMode: boolean;
   label: string;
   model: string;
+  thinking?: VisionThinkingMode;
 };
 
 export const VISION_PROVIDER_PRESETS: Record<VisionProviderPresetId, VisionProviderPreset> = {
@@ -19,6 +21,7 @@ export const VISION_PROVIDER_PRESETS: Record<VisionProviderPresetId, VisionProvi
     jsonMode: true,
     label: "DeepSeek",
     model: "deepseek-v4-flash-vision-exp",
+    thinking: "disabled",
   },
   doubao: {
     baseURL: "https://ark.cn-beijing.volces.com/api/v3",

@@ -176,6 +176,28 @@ npm run build:web
 
 Commit: `feat(settings): add local BYOK vision providers`
 
+## Iteration 7 - DeepSeek Vision Reliability
+
+Status: completed
+
+- [x] Diagnose the browser timeout against live API timings without reading or logging the user's key.
+- [x] Disable DeepSeek thinking mode for deterministic structured extraction.
+- [x] Raise the output budget and align model, analysis, and client timeout boundaries.
+- [x] Return specific provider-timeout and truncated-output errors.
+- [x] Add provider payload, timeout, truncation, and route regression tests.
+- [x] Run the full check, browser smoke test, and production builds.
+- [x] Commit and push the fix to `origin/main`.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+```
+
+Commit: `fix(provider): harden DeepSeek vision analysis`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.
