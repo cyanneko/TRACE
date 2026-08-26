@@ -5,9 +5,11 @@ import { colors } from "../theme";
 
 const options: Array<{ id: FixtureId; label: string }> = [
   { id: "meeting", label: "Meeting" },
+  { id: "update-meeting", label: "Reschedule" },
   { id: "new-contact", label: "New contact" },
-  { id: "update-contact", label: "Update" },
-  { id: "no-action", label: "No action" },
+  { id: "update-contact", label: "Contact update" },
+  { id: "many-actions", label: "Many" },
+  { id: "no-action", label: "None" },
 ];
 
 type Props = {
@@ -57,12 +59,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderRadius: 6,
     flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 3,
     padding: 3,
   },
   option: {
     alignItems: "center",
     borderRadius: 4,
-    flex: 1,
+    flexBasis: "30%",
+    flexGrow: 1,
     justifyContent: "center",
     minHeight: 42,
     paddingHorizontal: 8,

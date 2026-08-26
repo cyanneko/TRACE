@@ -1,5 +1,6 @@
 import type { ActionCard, Evidence } from "@trace/contracts";
 import {
+  CalendarClock,
   CalendarPlus,
   CheckSquare2,
   Square,
@@ -24,6 +25,7 @@ const cardMeta: Record<
   { icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>; label: string }
 > = {
   create_meeting: { icon: CalendarPlus, label: "Meeting" },
+  update_meeting: { icon: CalendarClock, label: "Meeting update" },
   create_contact: { icon: UserPlus, label: "New contact" },
   update_contact: { icon: UserPen, label: "Contact update" },
 };
@@ -163,6 +165,49 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
     );
   }
 
+  if (card.type === "update_meeting") {
+    return (
+      <View style={styles.fields}>
+        <Field label="Meeting" onChangeText={() => undefined} readOnly value={card.payload.displayTitle} />
+        {card.payload.changes.map((change, index) => (
+          <View key={`${change.field}-${index}`} style={styles.changeRow}>
+            <View style={styles.changeLabel}>
+              <Text style={styles.changeField}>{change.field}</Text>
+              <Text numberOfLines={1} style={styles.previousValue}>
+                {formatMeetingChangeValue(change.previousValue) || "No existing value"}
+              </Text>
+            </View>
+            <Field
+              label="New value"
+              onChangeText={(nextValue) => {
+                const changes = card.payload.changes.map((item, itemIndex) => {
+                  if (itemIndex !== index) {
+                    return item;
+                  }
+                  if (item.field === "participantContactIds") {
+                    return {
+                      ...item,
+                      nextValue: nextValue
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    };
+                  }
+                  if (item.field === "title" || item.field === "timezone") {
+                    return { ...item, nextValue };
+                  }
+                  return { ...item, nextValue: nextValue || null };
+                });
+                onChange({ ...card, payload: { ...card.payload, changes } });
+              }}
+              value={formatMeetingChangeValue(change.nextValue)}
+            />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.fields}>
       <Field label="Contact" onChangeText={() => undefined} readOnly value={card.payload.displayName} />
@@ -188,6 +233,10 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
       ))}
     </View>
   );
+}
+
+function formatMeetingChangeValue(value: string | string[] | null): string {
+  return Array.isArray(value) ? value.join(", ") : (value ?? "");
 }
 
 type FieldProps = {

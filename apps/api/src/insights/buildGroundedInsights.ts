@@ -60,6 +60,24 @@ function actionInsight(input: InsightRequest, action: ActionCard): Insight | nul
     };
   }
 
+  if (action.type === "update_meeting") {
+    const changes = action.payload.changes
+      .map((change) => {
+        const nextValue = Array.isArray(change.nextValue) ? change.nextValue.join("、") : change.nextValue;
+        return `${change.field}: ${nextValue ?? "已清空"}`;
+      })
+      .join("；");
+    return {
+      title: "会议安排已经变化，相关准备也需要重新对齐",
+      body: `${action.payload.displayTitle} 已更新为 ${changes}。建议确认参与人都已看到最新安排。`,
+      importance: "high",
+      evidenceRefs,
+      memoryRefs,
+      nextStep: "向参与人发送简短的改期确认，并检查原有提醒是否同步更新。",
+      suggestedMessage: `${action.payload.displayTitle} 已按最新安排更新，请以新的会议信息为准。`,
+    };
+  }
+
   const changes = action.payload.changes.map((change) => `${change.field}: ${change.nextValue}`).join("；");
   return {
     title: "联系人变化可能意味着沟通语境也变了",

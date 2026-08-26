@@ -14,6 +14,7 @@ const meeting: CreateMeetingCard = {
   evidenceRefs: ["evidence-1"],
   editableFields: [],
   riskFlags: [],
+  memoryProposals: [],
   payload: {
     title: "Review",
     startAt: "2026-08-27T07:00:00.000Z",
@@ -77,6 +78,7 @@ describe("mergeMemoryEntries", () => {
       evidenceRefs: ["evidence-2"],
       editableFields: [],
       riskFlags: [],
+      memoryProposals: [],
       payload: {
         contactId: "contact-maya",
         displayName: "Maya",

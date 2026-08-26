@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { ActionCardSchema, InsightBundleSchema, InsightRequestSchema, UserVisionProviderSchema } from "./schemas";
+import {
+  ActionCardSchema,
+  AnalyzeModelOutputSchema,
+  ContactRecordSchema,
+  InsightBundleSchema,
+  InsightRequestSchema,
+  MeetingRecordSchema,
+  UserVisionProviderSchema,
+} from "./schemas";
 
 describe("ActionCardSchema", () => {
   it("accepts a grounded meeting proposal", () => {
@@ -43,6 +51,173 @@ describe("ActionCardSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("accepts a minimal contact created from a visible chat name", () => {
+    const result = ActionCardSchema.safeParse({
+      id: "action-contact-minimal",
+      type: "create_contact",
+      title: "Create contact River",
+      confidence: 0.78,
+      evidenceRefs: ["evidence-direct-reply"],
+      editableFields: ["displayName"],
+      riskFlags: [],
+      memoryProposals: [
+        {
+          target: { type: "action_entity" },
+          kind: "context",
+          content: "River directly asked to continue the conversation next week.",
+          evidenceRefs: ["evidence-direct-reply"],
+        },
+      ],
+      payload: {
+        displayName: "River",
+        givenName: "",
+        familyName: "",
+        company: "",
+        jobTitle: "",
+        phones: [],
+        emails: [],
+        notes: "",
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success && result.data.type === "create_contact") {
+      expect(result.data.payload.isSelf).toBe(false);
+      expect(result.data.payload.interactionSummary).toBe("");
+    }
+  });
+
+  it("accepts a grounded meeting update", () => {
+    const result = ActionCardSchema.safeParse({
+      id: "action-update-meeting",
+      type: "update_meeting",
+      title: "Move the design review",
+      confidence: 0.93,
+      evidenceRefs: ["evidence-new-time"],
+      editableFields: ["meetingId", "changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        meetingId: "meeting-design-review",
+        displayTitle: "Design review",
+        changes: [
+          {
+            field: "startAt",
+            previousValue: "2026-08-27T07:00:00.000Z",
+            nextValue: "2026-08-28T08:00:00.000Z",
+          },
+          {
+            field: "endAt",
+            previousValue: "2026-08-27T07:30:00.000Z",
+            nextValue: "2026-08-28T08:30:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("AnalyzeModelOutputSchema", () => {
+  it("does not truncate or reject more than three action cards", () => {
+    const actionCards = Array.from({ length: 6 }, (_, index) => ({
+      id: `action-${index}`,
+      type: "create_contact" as const,
+      title: `Create contact ${index}`,
+      confidence: 0.8,
+      evidenceRefs: ["evidence-1"],
+      editableFields: ["displayName"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        displayName: `Person ${index}`,
+        givenName: "",
+        familyName: "",
+        company: "",
+        jobTitle: "",
+        phones: [],
+        emails: [],
+        notes: "",
+        isSelf: false,
+        interactionSummary: "Direct conversation",
+      },
+    }));
+    const result = AnalyzeModelOutputSchema.safeParse({
+      thread: {
+        summary: "Several people directly interacted with the user.",
+        participants: [],
+        evidence: [{ id: "evidence-1", quote: "Let's stay in touch." }],
+        uncertainties: [],
+      },
+      actionCards,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.actionCards).toHaveLength(6);
+    }
+  });
+});
+
+describe("entity records", () => {
+  const timestamps = {
+    createdAt: "2026-08-26T03:30:00.000Z",
+    updatedAt: "2026-08-26T03:30:00.000Z",
+  };
+
+  it("accepts empty contact and meeting drafts", () => {
+    const contact = ContactRecordSchema.safeParse({
+      id: "9c35d7d1-46af-4612-af3a-97c2bc793027",
+      displayName: "",
+      phones: [],
+      emails: [],
+      isSelf: false,
+      status: "draft",
+      source: "trace",
+      ...timestamps,
+    });
+    const meeting = MeetingRecordSchema.safeParse({
+      id: "05227a21-b75f-41c1-9f48-720875cacbcd",
+      title: "",
+      timezone: "",
+      allDay: false,
+      participantContactIds: [],
+      status: "draft",
+      source: "trace",
+      ...timestamps,
+    });
+
+    expect(contact.success).toBe(true);
+    expect(meeting.success).toBe(true);
+  });
+
+  it("rejects active entities without their identifying fields", () => {
+    const contact = ContactRecordSchema.safeParse({
+      id: "9c35d7d1-46af-4612-af3a-97c2bc793027",
+      displayName: "",
+      phones: [],
+      emails: [],
+      isSelf: false,
+      status: "active",
+      source: "trace",
+      ...timestamps,
+    });
+    const meeting = MeetingRecordSchema.safeParse({
+      id: "05227a21-b75f-41c1-9f48-720875cacbcd",
+      title: "",
+      timezone: "",
+      allDay: false,
+      participantContactIds: [],
+      status: "active",
+      source: "trace",
+      ...timestamps,
+    });
+
+    expect(contact.success).toBe(false);
+    expect(meeting.success).toBe(false);
   });
 });
 

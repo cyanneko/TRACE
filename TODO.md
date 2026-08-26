@@ -272,6 +272,28 @@ npx expo export --platform ios
 
 Commit: `feat(navigation): add analyze and memory tabs`
 
+## Iteration 11 - Entity Memory Contracts
+
+Status: completed
+
+- [x] Remove the three-card limit from analysis and confirmed-action contracts.
+- [x] Add `update_meeting` with typed field changes.
+- [x] Allow minimal create-contact actions with empty optional identity fields.
+- [x] Add action-scoped Memory Proposals that remain inert before execution.
+- [x] Define local ContactRecord, MeetingRecord, EntityMemory, and draft states.
+- [x] Add update-meeting and four-action Fixture scenarios.
+- [x] Update existing consumers to handle the fourth action type without breaking the runnable flow.
+- [x] Add schema and route regression tests for drafts, meeting updates, and more than three cards.
+
+Completion check:
+
+```bash
+npm run typecheck
+npm test
+```
+
+Commit: `feat(contracts): add entity memory and meeting updates`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

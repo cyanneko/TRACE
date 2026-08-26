@@ -57,7 +57,10 @@ export class ExpoActionExecutor implements ActionExecutor {
       if (action.type === "create_contact") {
         return await this.createContact(action);
       }
-      return await this.updateContact(action);
+      if (action.type === "update_contact") {
+        return await this.updateContact(action);
+      }
+      return failed(action.id, "Meeting updates are not available in the native executor yet.");
     } catch (error) {
       return failed(action.id, error instanceof Error ? error.message : "The native write failed.");
     }

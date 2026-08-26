@@ -37,6 +37,14 @@ const fixtures = {
         evidenceRefs: ["evidence-meeting-time", "evidence-send-deck"],
         editableFields: ["title", "startAt", "endAt", "notes"],
         riskFlags: [],
+        memoryProposals: [
+          {
+            target: { type: "action_entity" },
+            kind: "commitment",
+            content: "会前向 Maya 发送新版方案。",
+            evidenceRefs: ["evidence-send-deck"],
+          },
+        ],
         payload: {
           title: "与 Maya 的设计评审",
           startAt: "2026-08-27T07:00:00.000Z",
@@ -76,6 +84,14 @@ const fixtures = {
         evidenceRefs: ["evidence-new-contact"],
         editableFields: ["displayName", "company", "jobTitle", "phones", "emails"],
         riskFlags: [],
+        memoryProposals: [
+          {
+            target: { type: "action_entity" },
+            kind: "context",
+            content: "林乔希望下周继续讨论合作。",
+            evidenceRefs: ["evidence-new-contact"],
+          },
+        ],
         payload: {
           displayName: "林乔",
           givenName: "乔",
@@ -85,6 +101,8 @@ const fixtures = {
           phones: [],
           emails: ["linqiao@example.com"],
           notes: "希望下周继续讨论合作。",
+          isSelf: false,
+          interactionSummary: "林乔主动介绍自己并提出下周继续讨论合作。",
         },
       },
     ],
@@ -117,6 +135,14 @@ const fixtures = {
         evidenceRefs: ["evidence-new-role"],
         editableFields: ["changes"],
         riskFlags: [],
+        memoryProposals: [
+          {
+            target: { type: "contact", contactId: "contact-maya" },
+            kind: "context",
+            content: "Maya 的沟通重点可能转向产品负责人职责。",
+            evidenceRefs: ["evidence-new-role"],
+          },
+        ],
         payload: {
           contactId: "contact-maya",
           displayName: "Maya Chen",
@@ -135,6 +161,106 @@ const fixtures = {
         },
       },
     ],
+  },
+  "update-meeting": {
+    thread: {
+      summary: "Maya 将设计评审从周四下午三点改到周五下午四点，时长仍为 30 分钟。",
+      participants: [
+        {
+          displayName: "Maya Chen",
+          contactId: "contact-maya",
+          confidence: 0.97,
+        },
+      ],
+      evidence: [
+        {
+          id: "evidence-reschedule",
+          quote: "周四来不及了，改到周五下午 4 点吧，还是半小时。",
+          speaker: "Maya",
+          timestampText: "11:08",
+        },
+      ],
+      uncertainties: [],
+    },
+    actionCards: [
+      {
+        id: "action-update-meeting",
+        type: "update_meeting",
+        title: "将设计评审改到周五下午四点",
+        confidence: 0.94,
+        evidenceRefs: ["evidence-reschedule"],
+        editableFields: ["meetingId", "changes"],
+        riskFlags: [],
+        memoryProposals: [
+          {
+            target: { type: "meeting", meetingId: "meeting-design-review" },
+            kind: "context",
+            content: "Maya 因周四时间不足提出改期。",
+            evidenceRefs: ["evidence-reschedule"],
+          },
+        ],
+        payload: {
+          meetingId: "meeting-design-review",
+          displayTitle: "与 Maya 的设计评审",
+          changes: [
+            {
+              field: "startAt",
+              previousValue: "2026-08-27T07:00:00.000Z",
+              nextValue: "2026-08-28T08:00:00.000Z",
+            },
+            {
+              field: "endAt",
+              previousValue: "2026-08-27T07:30:00.000Z",
+              nextValue: "2026-08-28T08:30:00.000Z",
+            },
+          ],
+        },
+      },
+    ],
+  },
+  "many-actions": {
+    thread: {
+      summary: "四位新参与者分别与用户确认了后续联系，TRACE 为每个人保留独立联系人行动。",
+      participants: ["安然", "陈墨", "River", "周序"].map((displayName) => ({
+        displayName,
+        confidence: 0.86,
+      })),
+      evidence: ["安然", "陈墨", "River", "周序"].map((displayName, index) => ({
+        id: `evidence-person-${index + 1}`,
+        quote: `${displayName}：好的，我们保持联系。`,
+        speaker: displayName,
+      })),
+      uncertainties: [],
+    },
+    actionCards: ["安然", "陈墨", "River", "周序"].map((displayName, index) => ({
+      id: `action-contact-${index + 1}`,
+      type: "create_contact" as const,
+      title: `创建联系人 ${displayName}`,
+      confidence: 0.86,
+      evidenceRefs: [`evidence-person-${index + 1}`],
+      editableFields: ["displayName"],
+      riskFlags: [],
+      memoryProposals: [
+        {
+          target: { type: "action_entity" as const },
+          kind: "context" as const,
+          content: `${displayName} 与用户确认保持联系。`,
+          evidenceRefs: [`evidence-person-${index + 1}`],
+        },
+      ],
+      payload: {
+        displayName,
+        givenName: "",
+        familyName: "",
+        company: "",
+        jobTitle: "",
+        phones: [],
+        emails: [],
+        notes: "",
+        isSelf: false,
+        interactionSummary: `${displayName} 与用户发生了直接互动。`,
+      },
+    })),
   },
   "no-action": {
     thread: {

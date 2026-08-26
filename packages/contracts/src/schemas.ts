@@ -23,6 +23,19 @@ export const ThreadContextSchema = z.object({
   uncertainties: z.array(NonEmptyStringSchema),
 });
 
+export const MemoryProposalTargetSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("action_entity") }),
+  z.object({ type: z.literal("contact"), contactId: NonEmptyStringSchema }),
+  z.object({ type: z.literal("meeting"), meetingId: NonEmptyStringSchema }),
+]);
+
+export const MemoryProposalSchema = z.object({
+  target: MemoryProposalTargetSchema,
+  kind: z.enum(["context", "preference", "commitment", "note"]),
+  content: NonEmptyStringSchema,
+  evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+});
+
 const ActionCardBaseSchema = z.object({
   id: NonEmptyStringSchema,
   title: NonEmptyStringSchema,
@@ -30,6 +43,7 @@ const ActionCardBaseSchema = z.object({
   evidenceRefs: z.array(NonEmptyStringSchema),
   editableFields: z.array(NonEmptyStringSchema),
   riskFlags: z.array(NonEmptyStringSchema),
+  memoryProposals: z.array(MemoryProposalSchema).default([]),
 });
 
 export const CreateMeetingCardSchema = ActionCardBaseSchema.extend({
@@ -56,6 +70,8 @@ export const CreateContactCardSchema = ActionCardBaseSchema.extend({
     phones: z.array(NonEmptyStringSchema),
     emails: z.array(z.email()),
     notes: z.string(),
+    isSelf: z.boolean().default(false),
+    interactionSummary: z.string().default(""),
   }),
 });
 
@@ -74,8 +90,52 @@ export const UpdateContactCardSchema = ActionCardBaseSchema.extend({
   }),
 });
 
+const MeetingTextChangeSchema = z
+  .object({
+    field: z.enum(["title", "timezone", "location", "meetingLink", "notes"]),
+    previousValue: z.string().nullable(),
+    nextValue: z.string().nullable(),
+  })
+  .superRefine((change, context) => {
+    if ((change.field === "title" || change.field === "timezone") && !change.nextValue?.trim()) {
+      context.addIssue({
+        code: "custom",
+        message: `${change.field} cannot be empty.`,
+        path: ["nextValue"],
+      });
+    }
+  });
+
+const MeetingTimeChangeSchema = z.object({
+  field: z.enum(["startAt", "endAt"]),
+  previousValue: z.iso.datetime().nullable(),
+  nextValue: z.iso.datetime().nullable(),
+});
+
+const MeetingParticipantsChangeSchema = z.object({
+  field: z.literal("participantContactIds"),
+  previousValue: z.array(NonEmptyStringSchema),
+  nextValue: z.array(NonEmptyStringSchema),
+});
+
+export const MeetingChangeSchema = z.discriminatedUnion("field", [
+  MeetingTextChangeSchema,
+  MeetingTimeChangeSchema,
+  MeetingParticipantsChangeSchema,
+]);
+
+export const UpdateMeetingCardSchema = ActionCardBaseSchema.extend({
+  type: z.literal("update_meeting"),
+  payload: z.object({
+    meetingId: z.string().trim().nullable(),
+    displayTitle: NonEmptyStringSchema,
+    changes: z.array(MeetingChangeSchema).min(1),
+  }),
+});
+
 export const ActionCardSchema = z.discriminatedUnion("type", [
   CreateMeetingCardSchema,
+  UpdateMeetingCardSchema,
   CreateContactCardSchema,
   UpdateContactCardSchema,
 ]);
@@ -142,7 +202,7 @@ export const AnalyzeResultSchema = z.object({
   runId: z.uuid(),
   provider: ProviderInfoSchema,
   thread: ThreadContextSchema,
-  actionCards: z.array(ActionCardSchema).max(3),
+  actionCards: z.array(ActionCardSchema),
 });
 
 export const AnalyzeModelOutputSchema = AnalyzeResultSchema.omit({
@@ -159,7 +219,95 @@ export const ContactSummarySchema = z.object({
   emails: z.array(z.string()),
 });
 
-export const FixtureIdSchema = z.enum(["meeting", "new-contact", "update-contact", "no-action"]);
+export const ContactRecordSchema = z
+  .object({
+    id: z.uuid(),
+    externalContactId: z.string().trim().optional(),
+    displayName: z.string().trim().max(500),
+    sortName: z.string().trim().max(500).optional(),
+    givenName: z.string().trim().max(500).optional(),
+    familyName: z.string().trim().max(500).optional(),
+    company: z.string().trim().max(500).optional(),
+    jobTitle: z.string().trim().max(500).optional(),
+    phones: z.array(NonEmptyStringSchema),
+    emails: z.array(z.email()),
+    isSelf: z.boolean(),
+    status: z.enum(["draft", "active"]),
+    source: z.enum(["ios", "trace", "demo"]),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .superRefine((contact, context) => {
+    if (contact.status === "active" && !contact.displayName) {
+      context.addIssue({
+        code: "custom",
+        message: "An active contact requires a display name.",
+        path: ["displayName"],
+      });
+    }
+  });
+
+export const MeetingRecordSchema = z
+  .object({
+    id: z.uuid(),
+    externalEventId: z.string().trim().optional(),
+    title: z.string().trim().max(500),
+    startAt: z.iso.datetime().optional(),
+    endAt: z.iso.datetime().optional(),
+    timezone: z.string().trim().max(100),
+    allDay: z.boolean(),
+    location: z.string().trim().max(2_000).optional(),
+    meetingLink: z.string().trim().max(2_048).optional(),
+    notes: z.string().max(10_000).optional(),
+    participantContactIds: z.array(NonEmptyStringSchema),
+    status: z.enum(["draft", "active"]),
+    source: z.enum(["ios", "trace", "demo"]),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .superRefine((meeting, context) => {
+    if (meeting.status === "active" && !meeting.title) {
+      context.addIssue({
+        code: "custom",
+        message: "An active meeting requires a title.",
+        path: ["title"],
+      });
+    }
+    if (meeting.status === "active" && !meeting.timezone) {
+      context.addIssue({
+        code: "custom",
+        message: "An active meeting requires a timezone.",
+        path: ["timezone"],
+      });
+    }
+  });
+
+export const MeetingStateSchema = z.enum(["ongoing", "upcoming", "ended", "time_unresolved"]);
+
+export const EntityMemorySchema = z.object({
+  id: z.uuid(),
+  ownerType: z.enum(["contact", "meeting"]),
+  ownerId: z.uuid(),
+  kind: z.enum(["context", "preference", "commitment", "note"]),
+  content: NonEmptyStringSchema,
+  status: z.enum(["active", "deleted"]),
+  source: z.enum(["action", "manual", "migration"]),
+  sourceRunId: z.uuid().optional(),
+  sourceActionId: z.string().trim().optional(),
+  sourceEvidenceRefs: z.array(z.string()),
+  confidence: ConfidenceSchema.optional(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const FixtureIdSchema = z.enum([
+  "meeting",
+  "update-meeting",
+  "new-contact",
+  "update-contact",
+  "many-actions",
+  "no-action",
+]);
 
 export const AnalyzeRequestSchema = z.object({
   screenshotDataUrl: z
@@ -180,6 +328,13 @@ export const ToolResultSchema = z.object({
   success: z.boolean(),
   provider: z.enum(["native", "demo"]),
   externalId: z.string().optional(),
+  entityRef: z
+    .object({
+      type: z.enum(["contact", "meeting"]),
+      id: z.uuid(),
+      externalId: z.string().optional(),
+    })
+    .optional(),
   error: z.string().optional(),
 });
 
@@ -225,8 +380,8 @@ export const InsightRequestSchema = z
   .object({
     sourceRunId: z.uuid(),
     thread: ThreadContextSchema,
-    confirmedActions: z.array(ActionCardSchema).max(3),
-    toolResults: z.array(ToolResultSchema).max(3),
+    confirmedActions: z.array(ActionCardSchema),
+    toolResults: z.array(ToolResultSchema),
     memories: z.array(MemoryEntrySchema).max(100),
     contacts: z.array(ContactSummarySchema).max(200).default([]),
     timezone: z.string().trim().min(1).max(100),
@@ -257,9 +412,12 @@ export type Evidence = z.infer<typeof EvidenceSchema>;
 export type ThreadParticipant = z.infer<typeof ThreadParticipantSchema>;
 export type ThreadContext = z.infer<typeof ThreadContextSchema>;
 export type CreateMeetingCard = z.infer<typeof CreateMeetingCardSchema>;
+export type UpdateMeetingCard = z.infer<typeof UpdateMeetingCardSchema>;
 export type CreateContactCard = z.infer<typeof CreateContactCardSchema>;
 export type ContactChange = z.infer<typeof ContactChangeSchema>;
 export type UpdateContactCard = z.infer<typeof UpdateContactCardSchema>;
+export type MeetingChange = z.infer<typeof MeetingChangeSchema>;
+export type MemoryProposal = z.infer<typeof MemoryProposalSchema>;
 export type ActionCard = z.infer<typeof ActionCardSchema>;
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 export type VisionProviderId = z.infer<typeof VisionProviderIdSchema>;
@@ -270,6 +428,10 @@ export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>;
 export type AnalyzeModelOutput = z.infer<typeof AnalyzeModelOutputSchema>;
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
 export type ContactSummary = z.infer<typeof ContactSummarySchema>;
+export type ContactRecord = z.infer<typeof ContactRecordSchema>;
+export type MeetingRecord = z.infer<typeof MeetingRecordSchema>;
+export type MeetingState = z.infer<typeof MeetingStateSchema>;
+export type EntityMemory = z.infer<typeof EntityMemorySchema>;
 export type FixtureId = z.infer<typeof FixtureIdSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type ActionExecutionRecord = z.infer<typeof ActionExecutionRecordSchema>;

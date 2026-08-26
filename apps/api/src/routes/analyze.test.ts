@@ -86,6 +86,34 @@ describe("POST /v1/analyze", () => {
     expect(response.json().actionCards).toEqual([]);
   });
 
+  it("returns every card when a fixture contains more than three actions", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        ...validPayload,
+        fixtureId: "many-actions",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().actionCards).toHaveLength(4);
+  });
+
+  it("returns a validated meeting update", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        ...validPayload,
+        fixtureId: "update-meeting",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().actionCards[0]).toMatchObject({ type: "update_meeting" });
+  });
+
   it("uses a user-selected fixture without returning supplied credentials", async () => {
     const response = await createServer().inject({
       method: "POST",

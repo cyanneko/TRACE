@@ -25,6 +25,9 @@ function externalPrefix(action: ActionCard): string {
   if (action.type === "create_contact") {
     return "contact";
   }
+  if (action.type === "update_meeting") {
+    return "event-update";
+  }
   return "contact-update";
 }
 
@@ -54,6 +57,8 @@ export class DemoActionExecutor implements ActionExecutor {
       externalId:
         action.type === "update_contact" && action.payload.contactId
           ? action.payload.contactId
+          : action.type === "update_meeting" && action.payload.meetingId
+            ? action.payload.meetingId
           : `demo-${externalPrefix(action)}-${this.createId()}`,
     };
     const record: ActionExecutionRecord = {

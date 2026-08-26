@@ -87,6 +87,11 @@ export function deriveMemoryCandidates(input: DeriveInput): MemoryEntry[] {
       ];
     }
 
+    // Meeting-owned memory is committed by the entity repository introduced in the next migration.
+    if (action.type === "update_meeting") {
+      return [];
+    }
+
     return action.payload.changes.map((change) =>
       baseMemory(input, action, {
         contactId: action.payload.contactId ?? result.externalId,

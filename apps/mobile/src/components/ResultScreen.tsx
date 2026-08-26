@@ -30,6 +30,9 @@ function actionLabel(type: string): string {
   if (type === "create_meeting") {
     return "Calendar event";
   }
+  if (type === "update_meeting") {
+    return "Meeting update";
+  }
   if (type === "create_contact") {
     return "New contact";
   }
@@ -89,7 +92,10 @@ export function ResultScreen({
           <View style={styles.resultList}>
             {execution.results.map((result) => {
               const action = actionById.get(result.actionId);
-              const Icon = action?.type === "create_meeting" ? CalendarCheck2 : UserCheck;
+              const Icon =
+                action?.type === "create_meeting" || action?.type === "update_meeting"
+                  ? CalendarCheck2
+                  : UserCheck;
               return (
                 <View key={result.actionId} style={styles.resultRow}>
                   <View style={[styles.resultIcon, !result.success && styles.resultIconFailed]}>
