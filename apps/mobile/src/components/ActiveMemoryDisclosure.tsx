@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.text,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
   },
   detail: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   list: {
@@ -112,26 +112,26 @@ const styles = StyleSheet.create({
   itemTitle: {
     color: colors.text,
     flex: 1,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
-    lineHeight: 17,
+    lineHeight: 20,
     minWidth: 0,
   },
   type: {
     color: colors.blue,
     flexShrink: 0,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
-    lineHeight: 17,
+    lineHeight: 20,
   },
   itemDetail: {
     color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 19,
   },
   source: {
     color: colors.textMuted,
-    fontSize: 10,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 16,
   },
 });

@@ -3,10 +3,14 @@ import path from "node:path";
 
 const screenshotPath = path.resolve("apps/mobile/assets/icon.png");
 
-async function uploadAndAnalyze(page: Page) {
+async function uploadScreenshot(page: Page) {
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByLabel("Choose a chat screenshot").click();
   await (await chooserPromise).setFiles(screenshotPath);
+}
+
+async function uploadAndAnalyze(page: Page) {
+  await uploadScreenshot(page);
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 }
@@ -28,6 +32,14 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByText("Analyze another thread", { exact: true }).click();
+  await expect(page.getByText("New thread", { exact: true })).toBeVisible();
+  await expect(page.getByText("Choose screenshot", { exact: true })).toBeVisible();
+  await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("1 active memory ready")).toHaveCount(0);
+  await expect(page.getByText("Fixture scenario", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Analyze thread" })).toHaveCount(0);
+  await uploadScreenshot(page);
+  await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
   await expect(page.getByText("1 active memory ready")).toBeVisible();
   const memoryDisclosure = page.getByRole("button", { name: "Show 1 active memory" });
   await expect(memoryDisclosure).toHaveAttribute("aria-expanded", "false");
@@ -47,7 +59,8 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await page.getByRole("button", { name: "Hide 1 active memory" }).click();
   await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toHaveCount(0);
   await page.getByText("Update", { exact: true }).click();
-  await uploadAndAnalyze(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
   await page.getByRole("button", { name: "Confirm and execute" }).click();
 
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
@@ -65,8 +78,13 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
 test("mobile no-action state stays conservative and within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expect(page.getByText("Turn a conversation into clear next steps")).toHaveCount(0);
+  await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
+  await uploadScreenshot(page);
+  await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
   await page.getByText("No action", { exact: true }).click();
-  await uploadAndAnalyze(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 
   await expect(page.getByText("No grounded action found")).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirm and execute" })).toHaveCount(0);

@@ -15,8 +15,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Cpu,
-  FileImage,
-  ImagePlus,
   RotateCcw,
   Settings,
   ShieldCheck,
@@ -61,7 +59,7 @@ type Phase = "capture" | "review" | "result";
 
 const previewImageStyle: ImageStyle = {
   backgroundColor: "#EEF0ED",
-  height: 280,
+  height: 260,
   width: "100%",
 };
 
@@ -486,102 +484,86 @@ function CaptureScreen({
   return (
     <ScrollView contentContainerStyle={styles.captureScroll} keyboardShouldPersistTaps="handled">
       <View style={styles.captureContent}>
-        <View style={styles.headingBlock}>
-          <Text style={styles.eyebrow}>NEW THREAD</Text>
-          <Text style={styles.heading}>Turn a conversation into clear next steps</Text>
-          <Text style={styles.lede}>Add one chat screenshot. TRACE will prepare actions for your review.</Text>
-        </View>
+        <Text style={styles.captureTitle}>New thread</Text>
 
         <Pressable
-          accessibilityLabel="Choose a chat screenshot"
+          accessibilityLabel={screenshot ? "Replace chat screenshot" : "Choose a chat screenshot"}
           onPress={chooseScreenshot}
-          style={({ pressed }) => [styles.uploadFrame, pressed && styles.uploadFramePressed]}
+          style={({ pressed }) => [
+            styles.uploadFrame,
+            screenshot && styles.uploadFrameSelected,
+            pressed && styles.uploadFramePressed,
+          ]}
         >
           {screenshot ? (
             <>
-              <Image
-                resizeMode="contain"
-                source={{ uri: screenshot.uri }}
-                style={previewImageStyle}
-              />
-              <View style={styles.fileRow}>
-                <FileImage color={colors.primary} size={18} strokeWidth={2} />
-                <View style={styles.fileCopy}>
-                  <Text numberOfLines={1} style={styles.fileName}>
-                    {screenshot.fileName}
-                  </Text>
-                  <Text style={styles.fileMeta}>
-                    {screenshot.width} × {screenshot.height}
-                  </Text>
-                </View>
-                <View style={styles.replaceButton}>
-                  <RotateCcw color={colors.blue} size={16} strokeWidth={2} />
-                  <Text style={styles.replaceText}>Replace</Text>
-                </View>
+              <Image resizeMode="contain" source={{ uri: screenshot.uri }} style={previewImageStyle} />
+              <View style={styles.replaceAffordance}>
+                <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
               </View>
             </>
           ) : (
             <View style={styles.uploadEmpty}>
-              <View style={styles.uploadIcon}>
-                <ImagePlus color={colors.primary} size={27} strokeWidth={1.8} />
-              </View>
               <Text style={styles.uploadTitle}>Choose screenshot</Text>
-              <Text style={styles.uploadMeta}>PNG, JPEG, GIF or WebP · up to 9 MB</Text>
             </View>
           )}
         </Pressable>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.inputLabel}>Additional context</Text>
-          <TextInput
-            maxLength={2_000}
-            multiline
-            onChangeText={onNoteChange}
-            placeholder="Anything the screenshot leaves out?"
-            placeholderTextColor={colors.textMuted}
-            selectionColor={colors.primary}
-            style={styles.noteInput}
-            value={note}
-          />
-          <Text style={styles.characterCount}>{note.length}/2000</Text>
-        </View>
-
-        <ActiveMemoryDisclosure memories={activeMemories} />
-
-        {fixtureMode ? (
-          <View style={styles.fixtureBand}>
-            <View style={styles.fixtureHeading}>
-              <Text style={styles.fixtureTitle}>Fixture mode</Text>
-              <Text style={styles.fixtureCopy}>Deterministic API response</Text>
-            </View>
-            <ScenarioSelector onChange={onFixtureChange} value={fixtureId} />
-          </View>
-        ) : null}
 
         {error ? <ErrorBanner message={error} /> : null}
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={busy}
-          onPress={onAnalyze}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.primaryButtonPressed,
-            busy && styles.primaryButtonDisabled,
-          ]}
-        >
-          {busy ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Sparkles color="#FFFFFF" size={18} strokeWidth={2.1} />
-          )}
-          <Text style={styles.primaryButtonText}>{busy ? "Analyzing thread" : "Analyze thread"}</Text>
-        </Pressable>
+        {screenshot ? (
+          <>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Additional context</Text>
+              <TextInput
+                maxLength={2_000}
+                multiline
+                onChangeText={onNoteChange}
+                placeholder="Anything the screenshot leaves out?"
+                placeholderTextColor={colors.textMuted}
+                selectionColor={colors.primary}
+                style={styles.noteInput}
+                value={note}
+              />
+              <Text style={styles.characterCount}>{note.length}/2000</Text>
+            </View>
 
-        <View style={styles.privacyRow}>
-          <ShieldCheck color={colors.textMuted} size={15} strokeWidth={2} />
-          <Text style={styles.privacyText}>No contacts, meetings or memories change during analysis.</Text>
-        </View>
+            <ActiveMemoryDisclosure memories={activeMemories} />
+
+            {fixtureMode ? (
+              <View style={styles.fixtureBand}>
+                <View style={styles.fixtureHeading}>
+                  <Text style={styles.fixtureTitle}>Fixture mode</Text>
+                  <Text style={styles.fixtureCopy}>Deterministic API response</Text>
+                </View>
+                <ScenarioSelector onChange={onFixtureChange} value={fixtureId} />
+              </View>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={onAnalyze}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.primaryButtonPressed,
+                busy && styles.primaryButtonDisabled,
+              ]}
+            >
+              {busy ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Sparkles color="#FFFFFF" size={20} strokeWidth={2.1} />
+              )}
+              <Text style={styles.primaryButtonText}>{busy ? "Analyzing thread" : "Analyze thread"}</Text>
+            </Pressable>
+
+            <View style={styles.privacyRow}>
+              <ShieldCheck color={colors.textMuted} size={16} strokeWidth={2} />
+              <Text style={styles.privacyText}>No contacts, meetings or memories change during analysis.</Text>
+            </View>
+          </>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -802,7 +784,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
   },
   brandSubline: {
@@ -829,7 +811,7 @@ const styles = StyleSheet.create({
   providerStatusText: {
     color: colors.primary,
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   providerStatusTextError: {
@@ -860,31 +842,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingVertical: 38,
+    paddingVertical: 24,
   },
   captureContent: {
     gap: 20,
     maxWidth: 680,
     width: "100%",
   },
-  headingBlock: {
-    gap: 7,
-  },
   eyebrow: {
     color: colors.primary,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
   },
-  heading: {
+  captureTitle: {
     color: colors.text,
-    fontSize: 27,
+    fontSize: 28,
     fontWeight: "700",
     lineHeight: 34,
-  },
-  lede: {
-    color: colors.textMuted,
-    fontSize: 14,
-    lineHeight: 21,
   },
   uploadFrame: {
     backgroundColor: colors.surface,
@@ -892,8 +866,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderStyle: "dashed",
     borderWidth: 1,
-    minHeight: 240,
+    minHeight: 168,
     overflow: "hidden",
+  },
+  uploadFrameSelected: {
+    borderStyle: "solid",
+    minHeight: 0,
   },
   uploadFramePressed: {
     borderColor: colors.primary,
@@ -903,68 +881,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
     justifyContent: "center",
-    minHeight: 240,
-    padding: 28,
-  },
-  uploadIcon: {
-    alignItems: "center",
-    backgroundColor: colors.primarySoft,
-    borderRadius: 8,
-    height: 52,
-    justifyContent: "center",
-    marginBottom: 13,
-    width: 52,
+    minHeight: 168,
+    padding: 24,
   },
   uploadTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: "700",
+    lineHeight: 25,
   },
-  uploadMeta: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 5,
-  },
-  fileRow: {
+  replaceAffordance: {
     alignItems: "center",
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 62,
-    paddingHorizontal: 14,
-  },
-  fileCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  fileName: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  fileMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
-  replaceButton: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    minHeight: 36,
-  },
-  replaceText: {
-    color: colors.blue,
-    fontSize: 12,
-    fontWeight: "700",
+    backgroundColor: "rgba(255, 255, 255, 0.94)",
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    position: "absolute",
+    right: 12,
+    top: 12,
+    width: 40,
   },
   inputGroup: {
     gap: 7,
   },
   inputLabel: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "700",
   },
   noteInput: {
@@ -973,17 +917,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 92,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    fontSize: 16,
+    lineHeight: 23,
+    minHeight: 108,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     textAlignVertical: "top",
   },
   characterCount: {
     alignSelf: "flex-end",
     color: colors.textMuted,
-    fontSize: 10,
+    fontSize: 12,
   },
   fixtureBand: {
     backgroundColor: colors.blueSoft,
@@ -1001,12 +945,12 @@ const styles = StyleSheet.create({
   },
   fixtureTitle: {
     color: colors.blue,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "800",
   },
   fixtureCopy: {
     color: colors.textMuted,
-    fontSize: 11,
+    fontSize: 12,
   },
   primaryButton: {
     alignItems: "center",
@@ -1015,7 +959,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 9,
     justifyContent: "center",
-    minHeight: 50,
+    minHeight: 54,
     paddingHorizontal: 18,
   },
   primaryButtonPressed: {
@@ -1026,7 +970,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "700",
   },
   privacyRow: {
@@ -1038,7 +982,7 @@ const styles = StyleSheet.create({
   privacyText: {
     color: colors.textMuted,
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 12,
     textAlign: "center",
   },
   errorBanner: {
@@ -1054,8 +998,8 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
   reviewScroll: {
     alignItems: "center",

@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
   },
   options: {
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     flex: 1,
     justifyContent: "center",
-    minHeight: 36,
+    minHeight: 42,
     paddingHorizontal: 8,
   },
   optionSelected: {
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   },
   optionText: {
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
   },

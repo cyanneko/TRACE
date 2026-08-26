@@ -5,6 +5,7 @@
 ## Working Rules
 
 - Keep the main user loop runnable after every iteration.
+- Before each new iteration, tag and push the current `main` revision so the previous UI can be restored directly.
 - Make one focused commit per iteration and push it to `origin/main` immediately.
 - Do not execute contacts, calendar, or memory writes before explicit confirmation.
 - Never commit or bundle provider keys; BYOK values may exist only at runtime.
@@ -220,6 +221,31 @@ npx expo export --platform ios
 ```
 
 Commit: `feat(memory): add expandable context details`
+
+## Iteration 9 - Compact App Capture Screen
+
+Status: completed
+
+- [x] Preserve Iteration 8 as the remote tag `iteration-8-expandable-memory` before editing.
+- [x] Replace the introductory hero copy with a single `New thread` title.
+- [x] Reduce the empty upload control to `Choose screenshot` only.
+- [x] Reveal additional context, memory, Fixture controls, and analysis actions only after image selection.
+- [x] Remove filename, dimensions, format help, and other nonessential capture copy.
+- [x] Increase the primary capture, input, memory, Fixture, and action typography.
+- [x] Add browser coverage for the progressive disclosure behavior.
+- [x] Run the full check and Web/iOS production bundles.
+- [x] Commit and push the iteration to `origin/main`.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(capture): simplify the app entry screen`
 
 ## Deferred Beyond MVP
 
