@@ -38,18 +38,18 @@ git diff --check
 git status --short
 ```
 
-Commit: `docs: add active development TODO`
+Commit: `a6d884e`
 
 ## Iteration 1 - Workspace and Contracts
 
-Status: pending
+Status: completed
 
-- [ ] Install or activate a Linux Node.js LTS runtime inside WSL.
-- [ ] Create an npm workspace for `apps/mobile`, `apps/api`, and `packages/contracts`.
-- [ ] Scaffold the Expo app with Web support and the product name TRACE.
-- [ ] Scaffold the TypeScript API with `/health`.
-- [ ] Define Zod schemas for thread context, action cards, tool results, memory, and insights.
-- [ ] Add root development, typecheck, and test scripts.
+- [x] Install or activate a Linux Node.js LTS runtime inside WSL.
+- [x] Create an npm workspace for `apps/mobile`, `apps/api`, and `packages/contracts`.
+- [x] Scaffold the Expo app with Web support and the product name TRACE.
+- [x] Scaffold the TypeScript API with `/health`.
+- [x] Define Zod schemas for thread context, action cards, tool results, memory, and insights.
+- [x] Add root development, typecheck, and test scripts.
 
 Completion check:
 
@@ -59,7 +59,7 @@ npm run typecheck
 npm test
 ```
 
-Commit: pending
+Commit: `build: scaffold TRACE workspace and contracts`
 
 ## Iteration 2 - Agent Analysis API
 
