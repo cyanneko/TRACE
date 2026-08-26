@@ -38,16 +38,19 @@ Execution + memory curation + insights
 
 ## Status
 
-The implementation is being scoped as a 48-hour Expo/React Native MVP with a TypeScript API and Postgres-backed structured memory.
+The active MVP is scoped for 16 development hours: an Expo/React Native client, a stateless TypeScript inference API, and device-local structured memory.
 
-See [the implementation draft](docs/IMPLEMENTATION_DRAFT.md) for architecture, schemas, agent boundaries, memory policy, test strategy, and delivery plan.
+See the planning documents:
+
+- [16-hour MVP build draft](docs/16H_MVP_BUILD_DRAFT.md)
+- [Full implementation draft](docs/IMPLEMENTATION_DRAFT.md)
 
 ## Development Direction
 
 - iOS client: Expo React Native + TypeScript
 - Agent/API: Node.js + TypeScript + Zod
 - Model providers: DeepSeek Vision first, OpenAI-compatible fallback
-- Data: Postgres/Supabase Storage
+- Data: device-local SQLite for runs, action events, and structured memory
 - iOS builds from WSL: EAS Build, with real-device testing through Expo
 
 ## Privacy Principle
