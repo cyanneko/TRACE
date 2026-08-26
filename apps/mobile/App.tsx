@@ -3,12 +3,16 @@ import {
   type ActionCard,
   type AnalyzeResult,
   type FixtureId,
+  type MemoryEntry,
   type ProviderInfo,
+  type ToolResult,
 } from "@trace/contracts";
 import { StatusBar } from "expo-status-bar";
 import {
   AlertCircle,
   ArrowLeft,
+  CheckCircle2,
+  Database,
   FileImage,
   ImagePlus,
   RotateCcw,
@@ -16,7 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -31,14 +35,19 @@ import {
   View,
 } from "react-native";
 
-import { analyzeScreenshot, getHealth, TraceApiError } from "./src/api/client";
+import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
 import { ActionCardView } from "./src/components/ActionCardView";
+import { ResultScreen } from "./src/components/ResultScreen";
 import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { demoContacts } from "./src/data/demoContacts";
+import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
+import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
+import { deriveMemoryCandidates } from "./src/memory/policy";
+import { WebMemoryRepository } from "./src/memory/webMemoryRepository";
 import { colors } from "./src/theme";
 
-type Phase = "capture" | "review";
+type Phase = "capture" | "review" | "result";
 
 const previewImageStyle: ImageStyle = {
   backgroundColor: "#EEF0ED",
@@ -67,6 +76,10 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeMemoryCount, setActiveMemoryCount] = useState(0);
+  const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
+  const actionExecutor = useMemo(() => new DemoActionExecutor(), []);
+  const memoryRepository = useMemo(() => new WebMemoryRepository(), []);
 
   useEffect(() => {
     let active = true;
@@ -89,6 +102,10 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    void memoryRepository.listActive().then((memories) => setActiveMemoryCount(memories.length));
+  }, [memoryRepository]);
+
   async function chooseScreenshot() {
     setError(null);
     try {
@@ -110,16 +127,18 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
+      const memories = await memoryRepository.listActive();
       const result = await analyzeScreenshot({
         contacts: demoContacts,
         currentTime: new Date().toISOString(),
         fixtureId: provider?.fixture === false ? undefined : fixtureId,
-        memories: [],
+        memories,
         note,
         screenshotDataUrl: screenshot.dataUrl,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       });
       setAnalysis(result);
+      setActiveMemoryCount(memories.length);
       setProvider(result.provider);
       setCards(result.actionCards);
       setSelectedIds(new Set(result.actionCards.map((card) => card.id)));
@@ -153,12 +172,129 @@ export default function App() {
     });
   }
 
+  function timezone() {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  }
+
+  async function requestInsights(
+    currentAnalysis: AnalyzeResult,
+    confirmedActions: ActionCard[],
+    results: ToolResult[],
+    activeMemories: MemoryEntry[],
+  ) {
+    const insightResult = await generateInsights({
+      sourceRunId: currentAnalysis.runId,
+      thread: currentAnalysis.thread,
+      confirmedActions,
+      toolResults: results,
+      memories: activeMemories,
+      contacts: demoContacts,
+      timezone: timezone(),
+      currentTime: new Date().toISOString(),
+    });
+    dispatchExecution({ type: "INSIGHTS_READY", insights: insightResult });
+  }
+
+  async function confirmSelectedActions() {
+    if (!analysis) {
+      return;
+    }
+
+    const selectedCards = cards.filter((card) => selectedIds.has(card.id));
+    const validatedCards = selectedCards.map((card) => ActionCardSchema.safeParse(card));
+    if (selectedCards.length === 0) {
+      setError("Select at least one action to continue.");
+      return;
+    }
+    if (validatedCards.some((result) => !result.success)) {
+      setError("One or more edited fields need attention before confirmation.");
+      return;
+    }
+
+    setError(null);
+    dispatchExecution({ type: "START" });
+    const confirmedActions = validatedCards.flatMap((result) => (result.success ? [result.data] : []));
+    const results: ToolResult[] = [];
+
+    try {
+      for (const action of confirmedActions) {
+        results.push(await actionExecutor.execute(analysis.runId, action));
+      }
+
+      const now = new Date().toISOString();
+      const candidates = deriveMemoryCandidates({
+        sourceRunId: analysis.runId,
+        actions: confirmedActions,
+        results,
+        now,
+      });
+      const merged = await memoryRepository.apply(candidates);
+      const activeMemories = merged.entries.filter((memory) => memory.status === "active");
+      dispatchExecution({
+        type: "EXECUTED",
+        results,
+        activeMemories,
+        writtenMemoryIds: merged.writtenMemoryIds,
+        supersededMemoryIds: merged.supersededMemoryIds,
+      });
+      setActiveMemoryCount(activeMemories.length);
+      setPhase("result");
+
+      try {
+        await requestInsights(analysis, confirmedActions, results, activeMemories);
+      } catch (insightError) {
+        dispatchExecution({
+          type: "FAILED",
+          error: insightError instanceof Error ? insightError.message : "Insight generation failed. Please retry.",
+        });
+      }
+    } catch (executionError) {
+      dispatchExecution({
+        type: "FAILED",
+        error: executionError instanceof Error ? executionError.message : "The selected actions could not be executed.",
+      });
+      setError("The selected actions could not be executed. No new memory was written.");
+    }
+  }
+
+  async function retryInsights() {
+    if (!analysis || execution.results.length === 0) {
+      return;
+    }
+
+    const resultIds = new Set(execution.results.map((result) => result.actionId));
+    const confirmedActions = cards.filter((card) => resultIds.has(card.id));
+    dispatchExecution({ type: "INSIGHTS_START" });
+    try {
+      await requestInsights(analysis, confirmedActions, execution.results, execution.activeMemories);
+    } catch (insightError) {
+      dispatchExecution({
+        type: "FAILED",
+        error: insightError instanceof Error ? insightError.message : "Insight generation failed. Please retry.",
+      });
+    }
+  }
+
+  async function deleteMemory(memoryId: string) {
+    await memoryRepository.delete(memoryId);
+    dispatchExecution({ type: "MEMORY_DELETED", memoryId });
+    const activeMemories = await memoryRepository.listActive();
+    setActiveMemoryCount(activeMemories.length);
+  }
+
   function reset() {
     setAnalysis(null);
     setCards([]);
     setSelectedIds(new Set());
     setError(null);
+    dispatchExecution({ type: "RESET" });
     setPhase("capture");
+  }
+
+  function startNewThread() {
+    reset();
+    setScreenshot(null);
+    setNote("");
   }
 
   const providerLabel = provider ? `${provider.id} · ${provider.model}` : "Checking API";
@@ -192,6 +328,7 @@ export default function App() {
       {phase === "capture" ? (
         <CaptureScreen
           busy={busy}
+          activeMemoryCount={activeMemoryCount}
           chooseScreenshot={chooseScreenshot}
           error={error}
           fixtureId={fixtureId}
@@ -202,7 +339,7 @@ export default function App() {
           onNoteChange={setNote}
           screenshot={screenshot}
         />
-      ) : analysis && screenshot ? (
+      ) : phase === "review" && analysis && screenshot ? (
         <ReviewScreen
           analysis={analysis}
           cards={cards}
@@ -211,8 +348,18 @@ export default function App() {
           onBack={reset}
           onCardChange={updateCard}
           onCardToggle={toggleCard}
+          onConfirm={() => void confirmSelectedActions()}
+          confirming={execution.status === "running"}
           screenshot={screenshot}
           selectedIds={selectedIds}
+        />
+      ) : phase === "result" && analysis ? (
+        <ResultScreen
+          analysis={analysis}
+          execution={execution}
+          onDeleteMemory={deleteMemory}
+          onNewThread={startNewThread}
+          onRetryInsights={() => void retryInsights()}
         />
       ) : null}
     </SafeAreaView>
@@ -220,6 +367,7 @@ export default function App() {
 }
 
 type CaptureProps = {
+  activeMemoryCount: number;
   busy: boolean;
   chooseScreenshot: () => void;
   error: string | null;
@@ -233,6 +381,7 @@ type CaptureProps = {
 };
 
 function CaptureScreen({
+  activeMemoryCount,
   busy,
   chooseScreenshot,
   error,
@@ -307,6 +456,18 @@ function CaptureScreen({
           <Text style={styles.characterCount}>{note.length}/2000</Text>
         </View>
 
+        {activeMemoryCount > 0 ? (
+          <View style={styles.memoryContext}>
+            <Database color={colors.blue} size={18} strokeWidth={2} />
+            <View style={styles.memoryContextCopy}>
+              <Text style={styles.memoryContextTitle}>
+                {activeMemoryCount} active {activeMemoryCount === 1 ? "memory" : "memories"} ready
+              </Text>
+              <Text style={styles.memoryContextDetail}>Included as context for this thread.</Text>
+            </View>
+          </View>
+        ) : null}
+
         {fixtureMode ? (
           <View style={styles.fixtureBand}>
             <View style={styles.fixtureHeading}>
@@ -351,9 +512,11 @@ type ReviewProps = {
   cards: ActionCard[];
   compact: boolean;
   error: string | null;
+  confirming: boolean;
   onBack: () => void;
   onCardChange: (card: ActionCard) => void;
   onCardToggle: (id: string) => void;
+  onConfirm: () => void;
   screenshot: SelectedScreenshot;
   selectedIds: Set<string>;
 };
@@ -362,10 +525,12 @@ function ReviewScreen({
   analysis,
   cards,
   compact,
+  confirming,
   error,
   onBack,
   onCardChange,
   onCardToggle,
+  onConfirm,
   screenshot,
   selectedIds,
 }: ReviewProps) {
@@ -471,6 +636,34 @@ function ReviewScreen({
         )}
 
         {error ? <ErrorBanner message={error} /> : null}
+
+        {cards.length > 0 ? (
+          <View style={styles.confirmationBoundary}>
+            <View style={styles.confirmationCopy}>
+              <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
+              <Text style={styles.confirmationDetail}>
+                {selectedIds.size} selected action(s) will be written by the Demo executor. Unselected cards stay untouched.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={confirming || selectedIds.size === 0}
+              onPress={onConfirm}
+              style={({ pressed }) => [
+                styles.confirmButton,
+                pressed && styles.primaryButtonPressed,
+                (confirming || selectedIds.size === 0) && styles.primaryButtonDisabled,
+              ]}
+            >
+              {confirming ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <CheckCircle2 color="#FFFFFF" size={18} strokeWidth={2.1} />
+              )}
+              <Text style={styles.confirmButtonText}>{confirming ? "Executing" : "Confirm and execute"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -684,6 +877,28 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     color: colors.textMuted,
     fontSize: 10,
+  },
+  memoryContext: {
+    alignItems: "center",
+    borderLeftColor: colors.blue,
+    borderLeftWidth: 3,
+    flexDirection: "row",
+    gap: 10,
+    paddingLeft: 12,
+    paddingVertical: 4,
+  },
+  memoryContextCopy: {
+    flex: 1,
+  },
+  memoryContextTitle: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  memoryContextDetail: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   fixtureBand: {
     backgroundColor: colors.blueSoft,
@@ -936,6 +1151,47 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: colors.blue,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  confirmationBoundary: {
+    alignItems: "center",
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    justifyContent: "space-between",
+    paddingTop: 18,
+  },
+  confirmationCopy: {
+    flex: 1,
+    minWidth: 240,
+  },
+  confirmationTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  confirmationDetail: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  confirmButton: {
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 7,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 46,
+    minWidth: 190,
+    paddingHorizontal: 17,
+  },
+  confirmButtonText: {
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "700",
   },

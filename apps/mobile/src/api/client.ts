@@ -2,6 +2,9 @@ import {
   AnalyzeResultSchema,
   type AnalyzeRequest,
   type AnalyzeResult,
+  type InsightRequest,
+  InsightResultSchema,
+  type InsightResult,
   type ProviderInfo,
 } from "@trace/contracts";
 import { Platform } from "react-native";
@@ -84,4 +87,20 @@ export async function analyzeScreenshot(input: AnalyzeRequest): Promise<AnalyzeR
   }
 
   return AnalyzeResultSchema.parse(await response.json());
+}
+
+export async function generateInsights(input: InsightRequest): Promise<InsightResult> {
+  const response = await request("/v1/insights", {
+    body: JSON.stringify(input),
+    headers: {
+      "content-type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw await readError(response);
+  }
+
+  return InsightResultSchema.parse(await response.json());
 }

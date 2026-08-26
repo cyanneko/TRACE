@@ -6,6 +6,7 @@ import { readEnvironment } from "./config.js";
 import { createModelProvider } from "./providers/createProvider.js";
 import type { ModelProvider } from "./providers/modelProvider.js";
 import { registerAnalyzeRoute } from "./routes/analyze.js";
+import { registerInsightsRoute } from "./routes/insights.js";
 
 type ServerOptions = {
   environment?: Environment;
@@ -31,6 +32,7 @@ export function buildServer(options: ServerOptions = {}) {
   }));
 
   registerAnalyzeRoute(app, provider);
+  registerInsightsRoute(app);
 
   return app;
 }

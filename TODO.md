@@ -103,20 +103,20 @@ npm run typecheck
 
 Manual check: upload a fixture screenshot and reach review without browser console errors.
 
-Commit: `feat(mobile): build WSL capture and review flow`
+Commit: `51da811`
 
 ## Iteration 4 - Execution, Memory, and Insights
 
-Status: pending
+Status: completed
 
-- [ ] Add the confirmation state boundary and execution reducer states.
-- [ ] Implement Web `DemoActionExecutor` with idempotent local action events.
-- [ ] Implement Web memory persistence with local storage.
-- [ ] Add deterministic memory writes from successful confirmed actions.
-- [ ] Implement supersede and delete behavior.
-- [ ] Implement `/v1/insights` and its fixture response.
-- [ ] Show execution results, evidence-backed insights, suggested messages, and memory updates.
-- [ ] Demonstrate a second run retrieving memory from the first run.
+- [x] Add the confirmation state boundary and execution reducer states.
+- [x] Implement Web `DemoActionExecutor` with idempotent local action events.
+- [x] Implement Web memory persistence with local storage.
+- [x] Add deterministic memory writes from successful confirmed actions.
+- [x] Implement supersede and delete behavior.
+- [x] Implement `/v1/insights` and its grounded policy response.
+- [x] Show execution results, evidence-backed insights, suggested messages, and memory updates.
+- [x] Demonstrate a second run retrieving memory from the first run.
 
 Completion check:
 
@@ -127,7 +127,7 @@ npm run typecheck
 
 Manual check: rejected actions cause no writes; repeated confirmation causes no duplicates.
 
-Commit: pending
+Commit: `feat(agent): execute actions and ground insights in memory`
 
 ## Iteration 5 - iOS Boundary and Handoff
 

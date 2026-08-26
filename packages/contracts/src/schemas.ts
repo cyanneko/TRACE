@@ -130,6 +130,14 @@ export const ToolResultSchema = z.object({
   error: z.string().optional(),
 });
 
+export const ActionExecutionRecordSchema = z.object({
+  idempotencyKey: NonEmptyStringSchema,
+  sourceRunId: z.uuid(),
+  action: ActionCardSchema,
+  result: ToolResultSchema,
+  executedAt: z.iso.datetime(),
+});
+
 export const MemoryEntrySchema = z.object({
   id: z.uuid(),
   contactId: z.string().optional(),
@@ -150,6 +158,7 @@ export const InsightSchema = z.object({
   body: NonEmptyStringSchema,
   importance: z.enum(["high", "medium", "low"]),
   evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+  memoryRefs: z.array(z.uuid()).default([]),
   nextStep: z.string().optional(),
   suggestedMessage: z.string().optional(),
 });
@@ -157,6 +166,38 @@ export const InsightSchema = z.object({
 export const InsightBundleSchema = z.object({
   insights: z.array(InsightSchema).max(3),
   unresolvedQuestions: z.array(NonEmptyStringSchema),
+});
+
+export const InsightRequestSchema = z
+  .object({
+    sourceRunId: z.uuid(),
+    thread: ThreadContextSchema,
+    confirmedActions: z.array(ActionCardSchema).max(3),
+    toolResults: z.array(ToolResultSchema).max(3),
+    memories: z.array(MemoryEntrySchema).max(100),
+    contacts: z.array(ContactSummarySchema).max(200).default([]),
+    timezone: z.string().trim().min(1).max(100),
+    currentTime: z.iso.datetime(),
+  })
+  .superRefine((input, context) => {
+    const confirmedIds = new Set(input.confirmedActions.map((action) => action.id));
+    const resultIds = new Set(input.toolResults.map((result) => result.actionId));
+
+    for (const resultId of resultIds) {
+      if (!confirmedIds.has(resultId)) {
+        context.addIssue({
+          code: "custom",
+          message: `Tool result ${resultId} does not match a confirmed action.`,
+          path: ["toolResults"],
+        });
+      }
+    }
+  });
+
+export const InsightResultSchema = InsightBundleSchema.extend({
+  sourceRunId: z.uuid(),
+  generatedAt: z.iso.datetime(),
+  provider: ProviderInfoSchema,
 });
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
@@ -174,6 +215,9 @@ export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
 export type ContactSummary = z.infer<typeof ContactSummarySchema>;
 export type FixtureId = z.infer<typeof FixtureIdSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
+export type ActionExecutionRecord = z.infer<typeof ActionExecutionRecordSchema>;
 export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
 export type Insight = z.infer<typeof InsightSchema>;
 export type InsightBundle = z.infer<typeof InsightBundleSchema>;
+export type InsightRequest = z.infer<typeof InsightRequestSchema>;
+export type InsightResult = z.infer<typeof InsightResultSchema>;

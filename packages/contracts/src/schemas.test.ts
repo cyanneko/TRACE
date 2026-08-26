@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ActionCardSchema, InsightBundleSchema } from "./schemas";
+import { ActionCardSchema, InsightBundleSchema, InsightRequestSchema } from "./schemas";
 
 describe("ActionCardSchema", () => {
   it("accepts a grounded meeting proposal", () => {
@@ -58,6 +58,44 @@ describe("InsightBundleSchema", () => {
         },
       ],
       unresolvedQuestions: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults memory references for evidence-only insights", () => {
+    const result = InsightBundleSchema.parse({
+      insights: [
+        {
+          title: "Prepare the deck",
+          body: "The revised deck is due before the meeting.",
+          importance: "high",
+          evidenceRefs: ["evidence-1"],
+        },
+      ],
+      unresolvedQuestions: [],
+    });
+
+    expect(result.insights[0]?.memoryRefs).toEqual([]);
+  });
+});
+
+describe("InsightRequestSchema", () => {
+  it("rejects tool results that were not confirmed in the same run", () => {
+    const result = InsightRequestSchema.safeParse({
+      sourceRunId: "2f887426-3d1f-4b68-a6bc-58e975ac35fb",
+      thread: {
+        summary: "A meeting was confirmed.",
+        participants: [],
+        evidence: [{ id: "evidence-1", quote: "Tomorrow at three." }],
+        uncertainties: [],
+      },
+      confirmedActions: [],
+      toolResults: [{ actionId: "not-confirmed", success: true, provider: "demo" }],
+      memories: [],
+      contacts: [],
+      timezone: "Asia/Shanghai",
+      currentTime: "2026-08-26T03:30:00.000Z",
     });
 
     expect(result.success).toBe(false);
