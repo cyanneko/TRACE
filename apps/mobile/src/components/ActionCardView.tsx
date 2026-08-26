@@ -11,6 +11,7 @@ import type { ComponentType } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors } from "../theme";
+import { DateTimeField } from "./DateTimeField";
 
 type Props = {
   card: ActionCard;
@@ -94,6 +95,26 @@ export function ActionCardView({ card, evidence, onChange, onToggle, selected }:
 
 function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
   if (card.type === "create_meeting") {
+    const updateStartAt = (startAt: string | undefined) => {
+      if (!startAt) {
+        onChange({ ...card, payload: { ...card.payload, startAt: null } });
+        return;
+      }
+      const previousStart = card.payload.startAt ? new Date(card.payload.startAt) : null;
+      const previousEnd = card.payload.endAt ? new Date(card.payload.endAt) : null;
+      const duration =
+        previousStart && previousEnd
+          ? Math.max(0, previousEnd.getTime() - previousStart.getTime())
+          : 30 * 60 * 1_000;
+      onChange({
+        ...card,
+        payload: {
+          ...card.payload,
+          startAt,
+          endAt: new Date(new Date(startAt).getTime() + duration).toISOString(),
+        },
+      });
+    };
     return (
       <View style={styles.fields}>
         <Field
@@ -102,17 +123,19 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
           value={card.payload.title}
         />
         <View style={styles.fieldRow}>
-          <Field
+          <DateTimeField
             label="Starts"
-            onChangeText={(startAt) =>
-              onChange({ ...card, payload: { ...card.payload, startAt: startAt || null } })
-            }
-            value={card.payload.startAt ?? ""}
+            onChange={updateStartAt}
+            timezone={card.payload.timezone}
+            value={card.payload.startAt ?? undefined}
           />
-          <Field
+          <DateTimeField
             label="Ends"
-            onChangeText={(endAt) => onChange({ ...card, payload: { ...card.payload, endAt: endAt || null } })}
-            value={card.payload.endAt ?? ""}
+            onChange={(endAt) =>
+              onChange({ ...card, payload: { ...card.payload, endAt: endAt ?? null } })
+            }
+            timezone={card.payload.timezone}
+            value={card.payload.endAt ?? undefined}
           />
         </View>
         <Field
@@ -166,6 +189,11 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
   }
 
   if (card.type === "update_meeting") {
+    const timezoneChange = card.payload.changes.find((change) => change.field === "timezone");
+    const timezone =
+      (timezoneChange?.field === "timezone" ? timezoneChange.nextValue : null) ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      "UTC";
     return (
       <View style={styles.fields}>
         <Field label="Meeting" onChangeText={() => undefined} readOnly value={card.payload.displayTitle} />
@@ -174,34 +202,48 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
             <View style={styles.changeLabel}>
               <Text style={styles.changeField}>{change.field}</Text>
               <Text numberOfLines={1} style={styles.previousValue}>
-                {formatMeetingChangeValue(change.previousValue) || "No existing value"}
+                {formatMeetingChangeValue(change.field, change.previousValue) || "No existing value"}
               </Text>
             </View>
-            <Field
-              label="New value"
-              onChangeText={(nextValue) => {
-                const changes = card.payload.changes.map((item, itemIndex) => {
-                  if (itemIndex !== index) {
-                    return item;
-                  }
-                  if (item.field === "participantContactIds") {
-                    return {
-                      ...item,
-                      nextValue: nextValue
-                        .split(",")
-                        .map((value) => value.trim())
-                        .filter(Boolean),
-                    };
-                  }
-                  if (item.field === "title" || item.field === "timezone") {
-                    return { ...item, nextValue };
-                  }
-                  return { ...item, nextValue: nextValue || null };
-                });
-                onChange({ ...card, payload: { ...card.payload, changes } });
-              }}
-              value={formatMeetingChangeValue(change.nextValue)}
-            />
+            {change.field === "startAt" || change.field === "endAt" ? (
+              <DateTimeField
+                label="New date and time"
+                onChange={(nextValue) => {
+                  const changes = card.payload.changes.map((item, itemIndex) =>
+                    itemIndex === index && (item.field === "startAt" || item.field === "endAt")
+                      ? { ...item, nextValue: nextValue ?? null }
+                      : item,
+                  );
+                  onChange({ ...card, payload: { ...card.payload, changes } });
+                }}
+                timezone={timezone}
+                value={change.nextValue ?? undefined}
+              />
+            ) : (
+              <Field
+                label="New value"
+                onChangeText={(nextValue) => {
+                  const changes = card.payload.changes.map((item, itemIndex) => {
+                    if (itemIndex !== index) return item;
+                    if (item.field === "participantContactIds") {
+                      return {
+                        ...item,
+                        nextValue: nextValue
+                          .split(",")
+                          .map((value) => value.trim())
+                          .filter(Boolean),
+                      };
+                    }
+                    if (item.field === "title" || item.field === "timezone") {
+                      return { ...item, nextValue };
+                    }
+                    return { ...item, nextValue: nextValue || null };
+                  });
+                  onChange({ ...card, payload: { ...card.payload, changes } });
+                }}
+                value={formatMeetingChangeValue(change.field, change.nextValue)}
+              />
+            )}
           </View>
         ))}
       </View>
@@ -235,8 +277,21 @@ function Fields({ card, onChange }: Pick<Props, "card" | "onChange">) {
   );
 }
 
-function formatMeetingChangeValue(value: string | string[] | null): string {
-  return Array.isArray(value) ? value.join(", ") : (value ?? "");
+function formatMeetingChangeValue(field: string, value: string | string[] | null): string {
+  if (Array.isArray(value)) return value.join(", ");
+  if ((field === "startAt" || field === "endAt") && value) {
+    const date = new Date(value);
+    if (Number.isFinite(date.getTime())) {
+      return date.toLocaleString(undefined, {
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+  }
+  return value ?? "";
 }
 
 type FieldProps = {

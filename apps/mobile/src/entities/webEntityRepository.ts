@@ -149,16 +149,17 @@ export class WebEntityRepository implements EntityRepository {
       );
       const existing = store.meetings[index];
       const preserveExisting = Boolean(existing && (existing.source === "trace" || source === "demo"));
+      const resolveParticipantContactId = (contactId: string) => {
+        const contact = store.contacts.find(
+          (candidate) => candidate.id === contactId || candidate.externalContactId === contactId,
+        );
+        return contact?.id ?? contactId;
+      };
       const participantContactIds = [
-        ...new Set(
-          summary.participantContactIds.map((contactId) => {
-            const contact = store.contacts.find(
-              (candidate) =>
-                candidate.id === contactId || candidate.externalContactId === contactId,
-            );
-            return contact?.id ?? contactId;
-          }),
-        ),
+        ...new Set(summary.participantContactIds.map(resolveParticipantContactId)),
+      ];
+      const existingParticipantContactIds = [
+        ...new Set((existing?.participantContactIds ?? []).map(resolveParticipantContactId)),
       ];
       const meeting = MeetingRecordSchema.parse({
         id: existing?.id ?? this.factory.createId(),
@@ -171,7 +172,7 @@ export class WebEntityRepository implements EntityRepository {
         location: preserveExisting ? existing!.location : summary.location || undefined,
         meetingLink: preserveExisting ? existing!.meetingLink : summary.meetingLink || undefined,
         notes: preserveExisting ? existing!.notes : summary.notes || undefined,
-        participantContactIds: preserveExisting ? existing!.participantContactIds : participantContactIds,
+        participantContactIds: preserveExisting ? existingParticipantContactIds : participantContactIds,
         status: "active",
         source: existing?.source ?? source,
         createdAt: existing?.createdAt ?? now,

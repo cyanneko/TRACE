@@ -282,4 +282,49 @@ describe("WebEntityRepository", () => {
       title: "Local review title",
     });
   });
+
+  it("reconciles a preserved legacy participant external id to its local contact", async () => {
+    const entities = repository(memoryStore());
+    const sourceContact = {
+      id: "contact-maya",
+      displayName: "Maya Chen",
+      company: "Atelier",
+      jobTitle: "Designer",
+      phones: [],
+      emails: ["maya@example.com"],
+    };
+    await entities.syncContacts([sourceContact], "demo");
+    const draft = await entities.createMeetingDraft("Asia/Shanghai");
+    await entities.saveMeeting({
+      ...draft,
+      externalEventId: "meeting-design-review",
+      participantContactIds: [sourceContact.id],
+      source: "demo",
+      status: "active",
+      title: "Design review with Maya",
+    });
+
+    await entities.syncMeetings(
+      [
+        {
+          id: "meeting-design-review",
+          externalEventId: "meeting-design-review",
+          title: "Design review with Maya",
+          startAt: "2026-08-27T07:00:00.000Z",
+          endAt: "2026-08-27T07:30:00.000Z",
+          timezone: "Asia/Shanghai",
+          allDay: false,
+          location: "",
+          meetingLink: "",
+          notes: "",
+          participantContactIds: [sourceContact.id],
+        },
+      ],
+      "demo",
+    );
+
+    const [contact] = await entities.listContacts();
+    const [meeting] = await entities.listMeetings();
+    expect(meeting?.participantContactIds).toEqual([contact?.id]);
+  });
 });

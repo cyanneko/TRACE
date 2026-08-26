@@ -61,10 +61,6 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
       throw new ModelProviderTimeoutError();
     }
 
-    const imageUrl =
-      this.config.imageFormat === "base64"
-        ? input.screenshotDataUrl.slice(input.screenshotDataUrl.indexOf(",") + 1)
-        : input.screenshotDataUrl;
     const imageDetail = this.config.imageDetail ? { detail: this.config.imageDetail } : {};
     const responseFormat = this.config.jsonMode
       ? {
@@ -73,6 +69,26 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
           },
         }
       : {};
+
+    const content: OpenAI.ChatCompletionContentPart[] = [
+      {
+        type: "text",
+        text: prompt,
+      },
+    ];
+    if (input.screenshotDataUrl) {
+      const imageUrl =
+        this.config.imageFormat === "base64"
+          ? input.screenshotDataUrl.slice(input.screenshotDataUrl.indexOf(",") + 1)
+          : input.screenshotDataUrl;
+      content.push({
+        type: "image_url",
+        image_url: {
+          url: imageUrl,
+          ...imageDetail,
+        },
+      });
+    }
 
     const request: CompletionRequest = {
       model: this.config.model,
@@ -83,19 +99,7 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
         },
         {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: prompt,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: imageUrl,
-                ...imageDetail,
-              },
-            },
-          ],
+          content,
         },
       ],
       max_tokens: 8_192,

@@ -73,6 +73,25 @@ describe("OpenAICompatibleVisionProvider", () => {
     });
   });
 
+  it("sends a text-only request without an image content part", async () => {
+    let requestBody: {
+      messages?: Array<{ content?: Array<{ type?: string }> }>;
+    } = {};
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+      return completionResponse(JSON.stringify(getAnalyzeFixture("no-action")));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new OpenAICompatibleVisionProvider(config).analyze({
+      ...input,
+      note: "Maya said hello, but no action is needed.",
+      screenshotDataUrl: undefined,
+    });
+
+    expect(requestBody.messages?.[1]?.content?.map((part) => part.type)).toEqual(["text"]);
+  });
+
   it("reports output truncated at the model token limit without a repair request", async () => {
     const fetchMock = vi.fn(async () => completionResponse('{"thread":', "length"));
     vi.stubGlobal("fetch", fetchMock);

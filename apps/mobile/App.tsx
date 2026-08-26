@@ -26,6 +26,7 @@ import {
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   type ImageStyle,
   Pressable,
@@ -49,6 +50,12 @@ import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
 import { mergeContactContext, mergeMeetingContext } from "./src/entities/analysisContext";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
+import {
+  isContactAction,
+  isMeetingAction,
+  linkCreatedContactsToMeeting,
+  orderActionsForExecution,
+} from "./src/execution/actionBatch";
 import { executeAndCommit } from "./src/execution/executeAndCommit";
 import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
@@ -63,6 +70,7 @@ import {
 import { colors } from "./src/theme";
 
 type Phase = "capture" | "review" | "result";
+type ReviewStage = "contacts" | "meetings";
 
 const previewImageStyle: ImageStyle = {
   backgroundColor: "#EEF0ED",
@@ -96,6 +104,8 @@ export default function App() {
   const [analysisContacts, setAnalysisContacts] = useState<ContactSummary[]>([]);
   const [cards, setCards] = useState<ActionCard[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [reviewStage, setReviewStage] = useState<ReviewStage>("meetings");
+  const [executingStage, setExecutingStage] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
@@ -107,6 +117,8 @@ export default function App() {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
+  const stagedActionsRef = useRef<ActionCard[]>([]);
+  const stagedResultsRef = useRef<ToolResult[]>([]);
   const platformServices = useMemo(() => createPlatformServices(), []);
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
   const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
@@ -262,8 +274,8 @@ export default function App() {
   }
 
   async function analyze() {
-    if (!screenshot) {
-      setError("Choose a chat screenshot first.");
+    if (!screenshot && !note.trim()) {
+      setError("Choose a screenshot or describe the conversation.");
       return;
     }
 
@@ -299,7 +311,7 @@ export default function App() {
         meetings,
         memories,
         note,
-        screenshotDataUrl: screenshot.dataUrl,
+        screenshotDataUrl: screenshot?.dataUrl,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         visionProvider: userVisionProvider ?? undefined,
       });
@@ -310,8 +322,12 @@ export default function App() {
       setEntityMeetings(localMeetings);
       setEntityMemories(currentEntityMemories);
       setProvider(result.provider);
-      setCards(result.actionCards);
-      setSelectedIds(new Set(result.actionCards.map((card) => card.id)));
+      const orderedCards = orderActionsForExecution(result.actionCards);
+      setCards(orderedCards);
+      setSelectedIds(new Set(orderedCards.map((card) => card.id)));
+      setReviewStage(orderedCards.some(isContactAction) ? "contacts" : "meetings");
+      stagedActionsRef.current = [];
+      stagedResultsRef.current = [];
       setPhase("review");
     } catch (analysisError) {
       setError(
@@ -370,9 +386,15 @@ export default function App() {
       return;
     }
 
-    const selectedCards = cards.filter((card) => selectedIds.has(card.id));
+    const stageCards = cards.filter(reviewStage === "contacts" ? isContactAction : isMeetingAction);
+    const selectedCards = stageCards.filter((card) => selectedIds.has(card.id));
     const validatedCards = selectedCards.map((card) => ActionCardSchema.safeParse(card));
-    if (selectedCards.length === 0) {
+    const hasSelectedMeeting = cards.some(
+      (card) => isMeetingAction(card) && selectedIds.has(card.id),
+    );
+    const canContinueWithoutStageActions =
+      (reviewStage === "contacts" && hasSelectedMeeting) || stagedActionsRef.current.length > 0;
+    if (selectedCards.length === 0 && !canContinueWithoutStageActions) {
       setError("Select at least one action to continue.");
       return;
     }
@@ -382,14 +404,49 @@ export default function App() {
     }
 
     setError(null);
-    dispatchExecution({ type: "START" });
-    const confirmedActions = validatedCards.flatMap((result) => (result.success ? [result.data] : []));
-    const results: ToolResult[] = [];
+    setExecutingStage(true);
+    if (stagedActionsRef.current.length === 0 && stagedResultsRef.current.length === 0) {
+      dispatchExecution({ type: "START" });
+    }
+    const confirmedStageActions = validatedCards.flatMap((result) =>
+      result.success ? [result.data] : [],
+    );
 
     try {
       const executor = analysis.provider.fixture ? fixtureActionExecutor : actionExecutor;
-      for (const action of confirmedActions) {
-        results.push(await executeAndCommit(analysis.runId, action, executor, entityRepository, timezone()));
+      const stageResults: ToolResult[] = [];
+      const executedStageActions: ActionCard[] = [];
+      const confirmedBatch = [...stagedActionsRef.current, ...confirmedStageActions];
+      for (const action of confirmedStageActions) {
+        const executableAction = linkCreatedContactsToMeeting(
+          action,
+          confirmedBatch,
+          [...stagedResultsRef.current, ...stageResults],
+        );
+        executedStageActions.push(executableAction);
+        stageResults.push(
+          await executeAndCommit(
+            analysis.runId,
+            executableAction,
+            executor,
+            entityRepository,
+            timezone(),
+          ),
+        );
+      }
+
+      const confirmedActions = [...stagedActionsRef.current, ...executedStageActions];
+      const results = [...stagedResultsRef.current, ...stageResults];
+      stagedActionsRef.current = confirmedActions;
+      stagedResultsRef.current = results;
+      await refreshEntities();
+
+      if (reviewStage === "contacts" && cards.some(isMeetingAction)) {
+        setReviewStage("meetings");
+        if (stageResults.some((result) => !result.success)) {
+          setError("Some contact actions failed. Dependent meetings will keep those people unlinked.");
+        }
+        return;
       }
 
       const now = new Date().toISOString();
@@ -409,7 +466,6 @@ export default function App() {
         supersededMemoryIds: merged.supersededMemoryIds,
       });
       setActiveMemories(activeMemories);
-      await refreshEntities();
       setPhase("result");
 
       try {
@@ -426,6 +482,8 @@ export default function App() {
         error: executionError instanceof Error ? executionError.message : "The selected actions could not be executed.",
       });
       setError("The selected actions could not be executed. No new memory was written.");
+    } finally {
+      setExecutingStage(false);
     }
   }
 
@@ -435,7 +493,9 @@ export default function App() {
     }
 
     const resultIds = new Set(execution.results.map((result) => result.actionId));
-    const confirmedActions = cards.filter((card) => resultIds.has(card.id));
+    const confirmedActions = (stagedActionsRef.current.length > 0 ? stagedActionsRef.current : cards).filter(
+      (card) => resultIds.has(card.id),
+    );
     dispatchExecution({ type: "INSIGHTS_START" });
     try {
       await requestInsights(analysis, confirmedActions, execution.results, execution.activeMemories);
@@ -638,6 +698,10 @@ export default function App() {
     setAnalysisContacts([]);
     setCards([]);
     setSelectedIds(new Set());
+    setReviewStage("meetings");
+    setExecutingStage(false);
+    stagedActionsRef.current = [];
+    stagedResultsRef.current = [];
     setError(null);
     dispatchExecution({ type: "RESET" });
     setPhase("capture");
@@ -774,7 +838,7 @@ export default function App() {
             onNoteChange={setNote}
             screenshot={screenshot}
           />
-        ) : phase === "review" && analysis && screenshot ? (
+        ) : phase === "review" && analysis ? (
           <ReviewScreen
             analysis={analysis}
             cards={cards}
@@ -784,10 +848,12 @@ export default function App() {
             onCardChange={updateCard}
             onCardToggle={toggleCard}
             onConfirm={() => void confirmSelectedActions()}
-            confirming={execution.status === "running"}
+            confirming={executingStage}
+            confirmedActionCount={stagedActionsRef.current.length}
             executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
             screenshot={screenshot}
             selectedIds={selectedIds}
+            stage={reviewStage}
           />
         ) : phase === "result" && analysis ? (
           <ResultScreen
@@ -837,38 +903,84 @@ function CaptureScreen({
   onNoteChange,
   screenshot,
 }: CaptureProps) {
+  const { height } = useWindowDimensions();
+  const hasInput = Boolean(screenshot || note.trim());
+  const progress = useRef(new Animated.Value(hasInput ? 1 : 0)).current;
+  const initialOffset = Math.max(64, Math.min(180, (height - 500) / 2));
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      duration: 260,
+      toValue: hasInput ? 1 : 0,
+      useNativeDriver: false,
+    }).start();
+  }, [hasInput, progress]);
+
   return (
     <ScrollView contentContainerStyle={styles.captureScroll} keyboardShouldPersistTaps="handled">
       <View style={styles.captureContent}>
         <Text style={styles.captureTitle}>New thread</Text>
-
-        <Pressable
-          accessibilityLabel={screenshot ? "Replace chat screenshot" : "Choose a chat screenshot"}
-          onPress={chooseScreenshot}
-          style={({ pressed }) => [
-            styles.uploadFrame,
-            screenshot && styles.uploadFrameSelected,
-            pressed && styles.uploadFramePressed,
+        <Animated.View
+          style={[
+            styles.captureBody,
+            {
+              transform: [
+                {
+                  translateY: progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [initialOffset, 0],
+                  }),
+                },
+              ],
+            },
           ]}
         >
           {screenshot ? (
-            <>
+            <Pressable
+              accessibilityLabel="Replace chat screenshot"
+              onPress={chooseScreenshot}
+              style={({ pressed }) => [
+                styles.uploadFrame,
+                styles.uploadFrameSelected,
+                pressed && styles.uploadFramePressed,
+              ]}
+            >
               <Image resizeMode="contain" source={{ uri: screenshot.uri }} style={previewImageStyle} />
               <View style={styles.replaceAffordance}>
                 <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
               </View>
-            </>
+            </Pressable>
           ) : (
-            <View style={styles.uploadEmpty}>
-              <Text style={styles.uploadTitle}>Choose screenshot</Text>
+            <View style={styles.threadComposer}>
+              <Pressable
+                accessibilityLabel="Choose a chat screenshot"
+                onPress={chooseScreenshot}
+                style={({ pressed }) => [styles.chooseScreenshot, pressed && styles.uploadFramePressed]}
+              >
+                <Text style={styles.uploadTitle}>Choose screenshot</Text>
+              </Pressable>
+              <View style={styles.composerDivider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
+              <TextInput
+                accessibilityLabel="Describe the conversation"
+                maxLength={2_000}
+                multiline
+                onChangeText={onNoteChange}
+                placeholder="Describe the conversation"
+                placeholderTextColor={colors.textMuted}
+                selectionColor={colors.primary}
+                style={styles.descriptionInput}
+                value={note}
+              />
             </View>
           )}
-        </Pressable>
 
-        {error ? <ErrorBanner message={error} /> : null}
+          {error ? <ErrorBanner message={error} /> : null}
 
-        {screenshot ? (
-          <>
+          {screenshot ? (
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Additional context</Text>
               <TextInput
@@ -883,7 +995,10 @@ function CaptureScreen({
               />
               <Text style={styles.characterCount}>{note.length}/2000</Text>
             </View>
+          ) : null}
 
+          {hasInput ? (
+            <>
             {fixtureMode ? (
               <View style={styles.fixtureBand}>
                 <View style={styles.fixtureHeading}>
@@ -916,8 +1031,9 @@ function CaptureScreen({
               <ShieldCheck color={colors.textMuted} size={16} strokeWidth={2} />
               <Text style={styles.privacyText}>No contacts, meetings or memories change during analysis.</Text>
             </View>
-          </>
-        ) : null}
+            </>
+          ) : null}
+        </Animated.View>
       </View>
     </ScrollView>
   );
@@ -927,6 +1043,7 @@ type ReviewProps = {
   analysis: AnalyzeResult;
   cards: ActionCard[];
   compact: boolean;
+  confirmedActionCount: number;
   error: string | null;
   executionMode: "demo" | "native";
   confirming: boolean;
@@ -934,8 +1051,9 @@ type ReviewProps = {
   onCardChange: (card: ActionCard) => void;
   onCardToggle: (id: string) => void;
   onConfirm: () => void;
-  screenshot: SelectedScreenshot;
+  screenshot: SelectedScreenshot | null;
   selectedIds: Set<string>;
+  stage: ReviewStage;
 };
 
 function ReviewScreen({
@@ -943,6 +1061,7 @@ function ReviewScreen({
   cards,
   compact,
   confirming,
+  confirmedActionCount,
   error,
   executionMode,
   onBack,
@@ -951,17 +1070,39 @@ function ReviewScreen({
   onConfirm,
   screenshot,
   selectedIds,
+  stage,
 }: ReviewProps) {
   const evidenceById = useMemo(
     () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
     [analysis.thread.evidence],
   );
+  const stageCards = cards.filter(stage === "contacts" ? isContactAction : isMeetingAction);
+  const selectedStageCount = stageCards.filter((card) => selectedIds.has(card.id)).length;
+  const selectedMeetingCount = cards.filter(
+    (card) => isMeetingAction(card) && selectedIds.has(card.id),
+  ).length;
+  const hasContactStage = cards.some(isContactAction);
+  const hasMeetingStage = cards.some(isMeetingAction);
+  const canConfirm =
+    selectedStageCount > 0 ||
+    confirmedActionCount > 0 ||
+    (stage === "contacts" && selectedMeetingCount > 0);
+  const confirmLabel =
+    stage === "contacts"
+      ? hasMeetingStage
+        ? selectedStageCount > 0
+          ? "Confirm contacts and continue"
+          : "Continue without contacts"
+        : "Confirm contacts"
+      : selectedStageCount > 0
+        ? "Confirm meetings"
+        : "Finish";
 
   return (
     <ScrollView contentContainerStyle={styles.reviewScroll} keyboardShouldPersistTaps="handled">
       <View style={styles.reviewContent}>
         <View style={styles.reviewHeader}>
-          <Pressable accessibilityLabel="Back to screenshot" hitSlop={8} onPress={onBack} style={styles.backButton}>
+          <Pressable accessibilityLabel="Back to thread input" hitSlop={8} onPress={onBack} style={styles.backButton}>
             <ArrowLeft color={colors.text} size={21} strokeWidth={2} />
           </Pressable>
           <View style={styles.reviewTitleGroup}>
@@ -976,13 +1117,15 @@ function ReviewScreen({
         </View>
 
         <View style={[styles.contextLayout, compact && styles.contextLayoutCompact]}>
-          <View style={[styles.screenshotRail, compact && styles.screenshotRailCompact]}>
-            <Image
-              resizeMode="contain"
-              source={{ uri: screenshot.uri }}
-              style={reviewImageStyle}
-            />
-          </View>
+          {screenshot ? (
+            <View style={[styles.screenshotRail, compact && styles.screenshotRailCompact]}>
+              <Image
+                resizeMode="contain"
+                source={{ uri: screenshot.uri }}
+                style={reviewImageStyle}
+              />
+            </View>
+          ) : null}
           <View style={styles.threadContext}>
             <Text style={styles.sectionLabel}>Thread context</Text>
             <Text style={styles.summary}>{analysis.thread.summary}</Text>
@@ -1015,19 +1158,28 @@ function ReviewScreen({
 
         <View style={styles.actionsHeading}>
           <View>
-            <Text style={styles.sectionLabel}>Proposed actions</Text>
-            <Text style={styles.actionsCount}>
-              {selectedIds.size} of {cards.length} selected
+            <Text style={styles.sectionLabel}>
+              {hasContactStage && hasMeetingStage ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
             </Text>
+            <Text style={styles.actionStageTitle}>{stage === "contacts" ? "Contacts" : "Meetings"}</Text>
+            <Text style={styles.actionsCount}>
+              {selectedStageCount} of {stageCards.length} selected
+            </Text>
+            {stage === "contacts" && hasMeetingStage ? (
+              <Text style={styles.stageHint}>Meetings are confirmed next and can link contacts created here.</Text>
+            ) : null}
+            {stage === "meetings" && hasContactStage ? (
+              <Text style={styles.stageHint}>Confirmed contacts are now available to dependent meetings.</Text>
+            ) : null}
           </View>
           <Text numberOfLines={1} style={styles.runId}>
             Run {analysis.runId.slice(0, 8)}
           </Text>
         </View>
 
-        {cards.length > 0 ? (
+        {stageCards.length > 0 ? (
           <View style={styles.cardList}>
-            {cards.map((card) => (
+            {stageCards.map((card) => (
               <ActionCardView
                 card={card}
                 evidence={card.evidenceRefs.flatMap((id) => {
@@ -1060,18 +1212,18 @@ function ReviewScreen({
             <View style={styles.confirmationCopy}>
               <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
               <Text style={styles.confirmationDetail}>
-                {selectedIds.size} selected action(s) will be written by the {executionMode === "demo" ? "Demo" : "iOS"} executor.
-                Unselected cards stay untouched.
+                {selectedStageCount} selected {stage === "contacts" ? "contact" : "meeting"} action(s) will be written by the {executionMode === "demo" ? "Demo" : "iOS"} executor.
+                Contacts always run before dependent meetings; unselected cards stay untouched.
               </Text>
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={confirming || selectedIds.size === 0}
+              disabled={confirming || !canConfirm}
               onPress={onConfirm}
               style={({ pressed }) => [
                 styles.confirmButton,
                 pressed && styles.primaryButtonPressed,
-                (confirming || selectedIds.size === 0) && styles.primaryButtonDisabled,
+                (confirming || !canConfirm) && styles.primaryButtonDisabled,
               ]}
             >
               {confirming ? (
@@ -1079,7 +1231,7 @@ function ReviewScreen({
               ) : (
                 <CheckCircle2 color="#FFFFFF" size={18} strokeWidth={2.1} />
               )}
-              <Text style={styles.confirmButtonText}>{confirming ? "Executing" : "Confirm and execute"}</Text>
+              <Text style={styles.confirmButtonText}>{confirming ? "Executing" : confirmLabel}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -1207,6 +1359,10 @@ const styles = StyleSheet.create({
     maxWidth: 680,
     width: "100%",
   },
+  captureBody: {
+    gap: 20,
+    width: "100%",
+  },
   eyebrow: {
     color: colors.primary,
     fontSize: 12,
@@ -1234,6 +1390,45 @@ const styles = StyleSheet.create({
   uploadFramePressed: {
     borderColor: colors.primary,
     opacity: 0.82,
+  },
+  threadComposer: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 258,
+    overflow: "hidden",
+  },
+  chooseScreenshot: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 88,
+    paddingHorizontal: 20,
+  },
+  composerDivider: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+  },
+  dividerLine: {
+    backgroundColor: colors.border,
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  descriptionInput: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 17,
+    lineHeight: 24,
+    minHeight: 148,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    textAlignVertical: "top",
   },
   uploadEmpty: {
     alignItems: "center",
@@ -1492,13 +1687,27 @@ const styles = StyleSheet.create({
   actionsHeading: {
     alignItems: "flex-end",
     flexDirection: "row",
+    gap: 16,
     justifyContent: "space-between",
+  },
+  actionStageTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 3,
   },
   actionsCount: {
     color: colors.text,
     fontSize: 14,
     fontWeight: "600",
     marginTop: 4,
+  },
+  stageHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+    maxWidth: 560,
   },
   runId: {
     color: colors.textMuted,

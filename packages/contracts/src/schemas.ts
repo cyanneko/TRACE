@@ -319,25 +319,37 @@ export const FixtureIdSchema = z.enum([
   "update-meeting",
   "new-contact",
   "update-contact",
+  "contact-meeting",
   "many-actions",
   "no-action",
 ]);
 
-export const AnalyzeRequestSchema = z.object({
-  screenshotDataUrl: z
-    .string()
-    .max(12 * 1024 * 1024)
-    .regex(/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/=\r\n]+$/),
-  note: z.string().trim().max(2_000).default(""),
-  contacts: z.array(ContactSummarySchema).max(200).default([]),
-  memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
-  meetings: z.array(MeetingSummarySchema).max(200).default([]),
-  entityMemories: z.array(EntityMemorySchema).max(300).default([]),
-  timezone: z.string().trim().min(1).max(100),
-  currentTime: z.iso.datetime(),
-  fixtureId: FixtureIdSchema.optional(),
-  visionProvider: UserVisionProviderSchema.optional(),
-});
+export const AnalyzeRequestSchema = z
+  .object({
+    screenshotDataUrl: z
+      .string()
+      .max(12 * 1024 * 1024)
+      .regex(/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/=\r\n]+$/)
+      .optional(),
+    note: z.string().trim().max(2_000).default(""),
+    contacts: z.array(ContactSummarySchema).max(200).default([]),
+    memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
+    meetings: z.array(MeetingSummarySchema).max(200).default([]),
+    entityMemories: z.array(EntityMemorySchema).max(300).default([]),
+    timezone: z.string().trim().min(1).max(100),
+    currentTime: z.iso.datetime(),
+    fixtureId: FixtureIdSchema.optional(),
+    visionProvider: UserVisionProviderSchema.optional(),
+  })
+  .superRefine((input, context) => {
+    if (!input.screenshotDataUrl && !input.note) {
+      context.addIssue({
+        code: "custom",
+        message: "Provide a screenshot or a description.",
+        path: ["note"],
+      });
+    }
+  });
 
 export const ToolResultSchema = z.object({
   actionId: NonEmptyStringSchema,

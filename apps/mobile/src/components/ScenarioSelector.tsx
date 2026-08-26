@@ -8,6 +8,7 @@ const options: Array<{ id: FixtureId; label: string }> = [
   { id: "update-meeting", label: "Reschedule" },
   { id: "new-contact", label: "New contact" },
   { id: "update-contact", label: "Contact update" },
+  { id: "contact-meeting", label: "Contact + meeting" },
   { id: "many-actions", label: "Many" },
   { id: "no-action", label: "None" },
 ];

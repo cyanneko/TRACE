@@ -409,6 +409,33 @@ npm run build:web
 
 Commit: `fix(provider): recover common structured output variants`
 
+## Iteration 17 - Dependent Contact and Meeting Flow
+
+Status: completed
+
+- [x] Preserve Iteration 16 as `iteration-16-provider-output-recovery` before editing.
+- [x] Accept either a screenshot or a written conversation description as analysis input.
+- [x] Keep additional context hidden until a screenshot is selected.
+- [x] Center the empty New Thread composer and animate it upward once input begins.
+- [x] Confirm and execute contact actions before dependent meeting actions.
+- [x] Link uniquely matched contacts created in the first stage into meetings confirmed in the second stage.
+- [x] Replace raw meeting timestamps with native/Web date-time controls in action cards and meeting details.
+- [x] Reconcile preserved external participant IDs to local contacts so Maya no longer appears as unknown.
+- [x] Replace one-at-a-time participant adding with a scrollable contact checklist that supports repeated toggling.
+- [x] Add a description-only Contact + meeting Fixture and cover staged linking in Playwright.
+- [x] Verify mobile layouts for capture, meeting actions, date fields, and participant editing in WSL Chromium.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(workflow): link contact and meeting confirmations`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

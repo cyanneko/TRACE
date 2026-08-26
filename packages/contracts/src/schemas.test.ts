@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ActionCardSchema,
+  AnalyzeRequestSchema,
   AnalyzeModelOutputSchema,
   ContactRecordSchema,
   InsightBundleSchema,
@@ -9,6 +10,30 @@ import {
   MeetingRecordSchema,
   UserVisionProviderSchema,
 } from "./schemas";
+
+const analyzeContext = {
+  contacts: [],
+  currentTime: "2026-08-26T03:30:00.000Z",
+  entityMemories: [],
+  meetings: [],
+  memories: [],
+  timezone: "Asia/Shanghai",
+};
+
+describe("AnalyzeRequestSchema", () => {
+  it("accepts a description without a screenshot", () => {
+    expect(
+      AnalyzeRequestSchema.safeParse({
+        ...analyzeContext,
+        note: "Maya asked to meet tomorrow at 3 PM.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires at least a screenshot or a description", () => {
+    expect(AnalyzeRequestSchema.safeParse(analyzeContext).success).toBe(false);
+  });
+});
 
 describe("ActionCardSchema", () => {
   it("accepts a grounded meeting proposal", () => {

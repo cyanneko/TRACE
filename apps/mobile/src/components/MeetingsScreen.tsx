@@ -2,10 +2,11 @@ import type { ContactRecord, EntityMemory, MeetingRecord, MeetingState } from "@
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   ChevronRight,
-  Clock3,
   Plus,
   Save,
+  SquarePen,
   Trash2,
   UserMinus,
   UserPlus,
@@ -15,6 +16,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 
 import { meetingState, sortContacts, sortMeetings } from "../entities/presentation";
 import { colors } from "../theme";
+import { DateTimeField } from "./DateTimeField";
 import { EntityMemoryEditor } from "./EntityMemoryEditor";
 
 type MemoryKind = EntityMemory["kind"];
@@ -240,13 +242,15 @@ function MeetingDetail({
   const [draft, setDraft] = useState(meeting);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const contactById = useMemo(
-    () => new Map(contacts.map((contact) => [contact.id, contact])),
-    [contacts],
-  );
-  const available = sortContacts(
-    contacts.filter((contact) => !meeting.participantContactIds.includes(contact.id)),
-  );
+  const contactById = useMemo(() => {
+    const indexed = new Map<string, ContactRecord>();
+    for (const contact of contacts) {
+      indexed.set(contact.id, contact);
+      if (contact.externalContactId) indexed.set(contact.externalContactId, contact);
+    }
+    return indexed;
+  }, [contacts]);
+  const sortedContacts = sortContacts(contacts);
 
   useEffect(() => setDraft(meeting), [meeting.id]);
 
@@ -263,6 +267,24 @@ function MeetingDetail({
     } finally {
       setSaving(false);
     }
+  }
+
+  function updateStartAt(startAt: string | undefined) {
+    setDraft((current) => {
+      if (!startAt) return { ...current, startAt: undefined };
+      const nextStart = new Date(startAt);
+      const previousStart = current.startAt ? new Date(current.startAt) : null;
+      const previousEnd = current.endAt ? new Date(current.endAt) : null;
+      const duration =
+        previousStart && previousEnd
+          ? Math.max(0, previousEnd.getTime() - previousStart.getTime())
+          : 30 * 60 * 1_000;
+      return {
+        ...current,
+        startAt,
+        endAt: new Date(nextStart.getTime() + duration).toISOString(),
+      };
+    });
   }
 
   return (
@@ -302,15 +324,17 @@ function MeetingDetail({
             value={draft.title}
           />
           <View style={styles.fieldRow}>
-            <DetailField
+            <DateTimeField
               label="Starts"
-              onChangeText={(startAt) => setDraft((current) => ({ ...current, startAt: startAt || undefined }))}
-              value={draft.startAt ?? ""}
+              onChange={updateStartAt}
+              timezone={draft.timezone}
+              value={draft.startAt}
             />
-            <DetailField
+            <DateTimeField
               label="Ends"
-              onChangeText={(endAt) => setDraft((current) => ({ ...current, endAt: endAt || undefined }))}
-              value={draft.endAt ?? ""}
+              onChange={(endAt) => setDraft((current) => ({ ...current, endAt }))}
+              timezone={draft.timezone}
+              value={draft.endAt}
             />
           </View>
           <View style={styles.fieldRow}>
@@ -333,19 +357,24 @@ function MeetingDetail({
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionHeading}>
+          <Pressable
+            accessibilityLabel="Edit participants"
+            accessibilityState={{ expanded: pickerOpen }}
+            onPress={() => setPickerOpen((value) => !value)}
+            style={({ pressed }) => [styles.sectionHeading, pressed && styles.pressed]}
+          >
             <View>
               <Text style={styles.sectionTitle}>Participants</Text>
               <Text style={styles.sectionMeta}>{meeting.participantContactIds.length} people</Text>
             </View>
-            <Pressable
-              accessibilityLabel="Add participant"
-              onPress={() => setPickerOpen((value) => !value)}
-              style={({ pressed }) => [styles.secondaryIconButton, pressed && styles.pressed]}
-            >
-              <UserPlus color={colors.blue} size={20} strokeWidth={2.1} />
-            </Pressable>
-          </View>
+            <View style={styles.secondaryIconButton}>
+              {pickerOpen ? (
+                <Check color={colors.primary} size={20} strokeWidth={2.2} />
+              ) : (
+                <SquarePen color={colors.blue} size={19} strokeWidth={2.1} />
+              )}
+            </View>
+          </Pressable>
 
           {pickerOpen ? (
             <View style={styles.picker}>
@@ -356,21 +385,35 @@ function MeetingDetail({
                 <Plus color={colors.primary} size={18} strokeWidth={2.2} />
                 <Text style={styles.pickerText}>New contact</Text>
               </Pressable>
-              {available.map((contact) => (
-                <Pressable
-                  key={contact.id}
-                  onPress={async () => {
-                    await onAddParticipant(contact.id);
-                    setPickerOpen(false);
-                  }}
-                  style={({ pressed }) => [styles.pickerRow, pressed && styles.rowPressed]}
-                >
-                  <UserPlus color={colors.blue} size={18} strokeWidth={2} />
-                  <Text numberOfLines={1} style={styles.pickerText}>
-                    {contact.displayName || "Unnamed contact"}
-                  </Text>
-                </Pressable>
-              ))}
+              <ScrollView nestedScrollEnabled style={styles.pickerContacts}>
+                {sortedContacts.map((contact) => {
+                  const participantId = meeting.participantContactIds.find(
+                    (id) => id === contact.id || id === contact.externalContactId,
+                  );
+                  const selected = Boolean(participantId);
+                  return (
+                    <Pressable
+                      accessibilityLabel={`${selected ? "Remove" : "Add"} ${contact.displayName || "unnamed contact"} ${selected ? "from" : "to"} meeting`}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected }}
+                      key={contact.id}
+                      onPress={() =>
+                        void (selected && participantId
+                          ? onRemoveParticipant(participantId)
+                          : onAddParticipant(contact.id))
+                      }
+                      style={({ pressed }) => [styles.pickerRow, pressed && styles.rowPressed]}
+                    >
+                      <Text numberOfLines={1} style={styles.pickerText}>
+                        {contact.displayName || "Unnamed contact"}
+                      </Text>
+                      <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
+                        {selected ? <Check color="#FFFFFF" size={15} strokeWidth={2.4} /> : null}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
           ) : null}
 
@@ -651,8 +694,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 6,
     borderWidth: 1,
-    maxHeight: 240,
     overflow: "hidden",
+  },
+  pickerContacts: {
+    maxHeight: 280,
   },
   pickerRow: {
     alignItems: "center",
@@ -668,6 +713,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "600",
+  },
+  checkbox: {
+    alignItems: "center",
+    borderColor: colors.textMuted,
+    borderRadius: 4,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  checkboxSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   participants: {
     gap: 7,

@@ -218,6 +218,73 @@ const fixtures = {
       },
     ],
   },
+  "contact-meeting": {
+    thread: {
+      summary: "林乔介绍了自己，并与用户确认明天下午三点进行合作沟通。",
+      participants: [
+        {
+          displayName: "林乔",
+          confidence: 0.94,
+        },
+      ],
+      evidence: [
+        {
+          id: "evidence-linqiao-intro",
+          quote: "我是 Northstar 的林乔，很高兴认识你。",
+          speaker: "林乔",
+        },
+        {
+          id: "evidence-linqiao-meeting",
+          quote: "那就明天下午 3 点聊半小时合作方案。",
+          speaker: "林乔",
+        },
+      ],
+      uncertainties: [],
+    },
+    actionCards: [
+      {
+        id: "action-create-linqiao-meeting",
+        type: "create_meeting",
+        title: "创建与林乔的合作沟通",
+        confidence: 0.94,
+        evidenceRefs: ["evidence-linqiao-meeting"],
+        editableFields: ["title", "startAt", "endAt", "notes"],
+        riskFlags: [],
+        memoryProposals: [],
+        payload: {
+          title: "与林乔的合作沟通",
+          startAt: "2026-08-27T07:00:00.000Z",
+          endAt: "2026-08-27T07:30:00.000Z",
+          timezone: "Asia/Shanghai",
+          participantContactIds: [],
+          participantNames: ["林乔"],
+          notes: "讨论合作方案。",
+        },
+      },
+      {
+        id: "action-create-linqiao",
+        type: "create_contact",
+        title: "创建联系人林乔",
+        confidence: 0.94,
+        evidenceRefs: ["evidence-linqiao-intro"],
+        editableFields: ["displayName", "company"],
+        riskFlags: [],
+        memoryProposals: [],
+        payload: {
+          displayName: "林乔",
+          givenName: "乔",
+          familyName: "林",
+          company: "Northstar",
+          jobTitle: "",
+          phones: [],
+          emails: [],
+          notes: "",
+          isSelf: false,
+          interactionSummary: "林乔直接介绍自己并确认了后续会议。",
+        },
+      },
+    ],
+  },
   "many-actions": {
     thread: {
       summary: "四位新参与者分别与用户确认了后续联系，TRACE 为每个人保留独立联系人行动。",

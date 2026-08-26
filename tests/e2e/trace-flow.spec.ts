@@ -21,7 +21,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
 
   await page.goto("/");
   await uploadAndAnalyze(page);
-  await page.getByRole("button", { name: "Confirm and execute" }).click();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
   await expect(page.getByText("会前承诺比日历事件更值得跟进")).toBeVisible();
 
   const firstRun = await page.evaluate(() => ({
@@ -42,7 +42,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await expect(page.getByText("Participants", { exact: true })).toBeVisible();
   await page.getByLabel("Remove Maya Chen").click();
   await expect(page.getByText("No participants.", { exact: true })).toBeVisible();
-  await page.getByLabel("Add participant").click();
+  await page.getByLabel("Edit participants").click();
   await page.getByText("Maya Chen", { exact: true }).click();
   await page.getByLabel("Open Maya Chen").click();
   await expect(contactsTab).toHaveAttribute("aria-selected", "true");
@@ -80,7 +80,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await page.getByText("Contact update", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm and execute" }).click();
+  await page.getByRole("button", { name: "Confirm contacts" }).click();
 
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
   const secondRun = await page.evaluate(() => {
@@ -125,9 +125,52 @@ test("mobile no-action state stays conservative and within the viewport", async 
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 
   await expect(page.getByText("No grounded action found")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Confirm and execute" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
   const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
   expect(widths.body).toBe(widths.viewport);
+});
+
+test("description-only analysis confirms contacts before meetings and links participants", async ({ page }) => {
+  await page.goto("/");
+  const composer = page.getByLabel("Describe the conversation");
+  const initialBox = await composer.boundingBox();
+  await composer.fill("林乔介绍了自己，并约我明天下午三点聊半小时合作方案。");
+  await page.getByText("Contact + meeting", { exact: true }).click();
+  await page.waitForTimeout(320);
+  const activeBox = await composer.boundingBox();
+  expect(initialBox).not.toBeNull();
+  expect(activeBox).not.toBeNull();
+  expect(activeBox!.y).toBeLessThan(initialBox!.y);
+
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await expect(page.getByText("STEP 1 OF 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("创建联系人林乔", { exact: true })).toBeVisible();
+  await expect(page.getByText("创建与林乔的合作沟通", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Confirm contacts and continue" }).click();
+  await expect(page.getByText("STEP 2 OF 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("创建与林乔的合作沟通", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+  await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
+
+  const linkedEntities = await page.evaluate(() => {
+    const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<{ displayName: string; id: string }>;
+      meetings?: Array<{ participantContactIds: string[]; title: string }>;
+    };
+    const contact = entities.contacts?.find((item) => item.displayName === "林乔");
+    const meeting = entities.meetings?.find((item) => item.title === "与林乔的合作沟通");
+    return {
+      contactId: contact?.id,
+      participants: meeting?.participantContactIds,
+    };
+  });
+  expect(linkedEntities.participants).toEqual([linkedEntities.contactId]);
+
+  await page.getByRole("tab", { name: "Meetings" }).click();
+  await page.getByLabel("Open 与林乔的合作沟通").click();
+  await expect(page.getByText("林乔", { exact: true })).toBeVisible();
+  await expect(page.getByText("Unknown contact", { exact: true })).toHaveCount(0);
 });
 
 test("provider settings persist locally and can be cleared", async ({ page }) => {

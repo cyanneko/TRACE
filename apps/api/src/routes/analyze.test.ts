@@ -115,6 +115,39 @@ describe("POST /v1/analyze", () => {
     expect(response.json().actionCards[0]).toMatchObject({ type: "update_meeting" });
   });
 
+  it("accepts a description-only request with dependent contact and meeting actions", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        ...validPayload,
+        fixtureId: "contact-meeting",
+        note: "林乔希望明天下午三点聊合作。",
+        screenshotDataUrl: undefined,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().actionCards.map((card: { type: string }) => card.type)).toEqual([
+      "create_meeting",
+      "create_contact",
+    ]);
+  });
+
+  it("rejects a request without a screenshot or description", async () => {
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: {
+        ...validPayload,
+        screenshotDataUrl: undefined,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("INVALID_ANALYZE_REQUEST");
+  });
+
   it("uses a user-selected fixture without returning supplied credentials", async () => {
     const response = await createServer().inject({
       method: "POST",
