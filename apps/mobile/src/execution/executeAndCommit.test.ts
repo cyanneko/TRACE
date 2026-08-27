@@ -17,7 +17,6 @@ const action: CreateContactCard = {
   memoryProposals: [
     {
       target: { type: "action_entity" },
-      kind: "context",
       content: "River asked to stay in touch.",
       evidenceRefs: ["evidence-river"],
     },

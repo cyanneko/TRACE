@@ -26,13 +26,13 @@ export const ThreadContextSchema = z.object({
 
 export const MemoryProposalTargetSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("action_entity") }),
+  z.object({ type: z.literal("global") }),
   z.object({ type: z.literal("contact"), contactId: NonEmptyStringSchema }),
   z.object({ type: z.literal("meeting"), meetingId: NonEmptyStringSchema }),
 ]);
 
 export const MemoryProposalSchema = z.object({
   target: MemoryProposalTargetSchema,
-  kind: z.enum(["context", "preference", "commitment", "note"]),
   content: NonEmptyStringSchema,
   evidenceRefs: z.array(NonEmptyStringSchema).min(1),
 });
@@ -303,9 +303,8 @@ export const MeetingSummarySchema = z.object({
 
 export const EntityMemorySchema = z.object({
   id: z.uuid(),
-  ownerType: z.enum(["contact", "meeting"]),
+  ownerType: z.enum(["global", "contact", "meeting"]),
   ownerId: z.uuid(),
-  kind: z.enum(["context", "preference", "commitment", "note"]),
   content: NonEmptyStringSchema,
   status: z.enum(["active", "deleted"]),
   source: z.enum(["action", "manual", "migration"]),

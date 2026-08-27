@@ -592,6 +592,33 @@ npx expo export --platform ios
 
 Commit: `fix(workflow): recover empty meeting plans`
 
+## Iteration 24 - Global Memory and Edge Navigation
+
+Status: completed
+
+- [x] Preserve Iteration 23 as `iteration-23-smaller-composer-meeting-recovery` before editing.
+- [x] Move Provider settings from the header to a compact bottom-right entry.
+- [x] Add a compact bottom-left Global Memory entry while preserving Meetings, Analyze, and Contacts as the larger primary navigation group.
+- [x] Add a fixed local Global Memory owner that does not depend on a contact or meeting record.
+- [x] Let users create, edit, and delete Global Memory from its own screen.
+- [x] Include active Global Memory in later model analysis context.
+- [x] Remove the `context`, `preference`, `commitment`, and `note` categories from memory proposals, storage contracts, and editors.
+- [x] Preserve existing memory text while safely discarding legacy category fields during schema parsing.
+- [x] Cover action-created Global Memory and category-free local persistence with automated tests.
+- [x] Verify the five-entry bottom navigation and memory editor at iPhone width.
+- [x] Run regression checks, Web build, and iOS export before publishing.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(memory): add category-free global memory`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

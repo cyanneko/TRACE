@@ -27,12 +27,13 @@ import {
   type EntityCommitRecord,
   type EntityStore,
 } from "./storageModel";
-import type {
-  CommitSuccessfulActionInput,
-  EntityOwner,
-  EntityRepository,
-  EntityRepositoryOptions,
-  ManualMemoryInput,
+import {
+  GLOBAL_MEMORY_OWNER,
+  type CommitSuccessfulActionInput,
+  type EntityOwner,
+  type EntityRepository,
+  type EntityRepositoryOptions,
+  type ManualMemoryInput,
 } from "./types";
 
 export const ENTITY_STORAGE_KEY = "trace.entities.v2";
@@ -230,7 +231,7 @@ export class WebEntityRepository implements EntityRepository {
 
   async updateMemory(
     memoryId: string,
-    patch: Pick<ManualMemoryInput, "content" | "kind">,
+    patch: Pick<ManualMemoryInput, "content">,
   ): Promise<EntityMemory> {
     const store = this.read();
     const index = store.memories.findIndex((memory) => memory.id === memoryId && memory.status === "active");
@@ -330,6 +331,12 @@ export class WebEntityRepository implements EntityRepository {
   }
 
   private assertOwnerExists(store: EntityStore, owner: EntityOwner): void {
+    if (owner.ownerType === "global") {
+      if (owner.ownerId !== GLOBAL_MEMORY_OWNER.ownerId) {
+        throw new Error("Global memory owner is invalid.");
+      }
+      return;
+    }
     const exists =
       owner.ownerType === "contact"
         ? store.contacts.some((contact) => contact.id === owner.ownerId)

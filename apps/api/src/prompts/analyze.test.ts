@@ -30,7 +30,6 @@ const input: AnalyzeRequest = {
       id: "10000000-0000-4000-8000-000000000001",
       ownerType: "meeting",
       ownerId: "20000000-0000-4000-8000-000000000001",
-      kind: "commitment",
       content: "Send the deck before the review.",
       status: "active",
       source: "manual",
@@ -75,6 +74,7 @@ describe("buildAnalyzePrompt", () => {
     expect(meetingPrompt).toContain("supplied contacts are the confirmed result of pass 1");
     expect(meetingPrompt).toContain("even when its time or other fields are incomplete");
     expect(meetingPrompt).toContain("genuinely no grounded meeting or meeting change");
+    expect(meetingPrompt).toContain("durable user-wide information");
   });
 
   it("keeps stage feedback as guidance rather than conversation evidence", () => {

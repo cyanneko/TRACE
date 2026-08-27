@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   Cpu,
   RotateCcw,
-  Settings,
   ShieldCheck,
   Sparkles,
   X,
@@ -47,11 +46,13 @@ import { activeTestFixtureId } from "./src/analysis/testFixture";
 import { ActionCardView } from "./src/components/ActionCardView";
 import { BottomNavigation, type MainTab } from "./src/components/BottomNavigation";
 import { ContactsScreen } from "./src/components/ContactsScreen";
+import { GlobalMemoryScreen } from "./src/components/GlobalMemoryScreen";
 import { MeetingsScreen } from "./src/components/MeetingsScreen";
 import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
 import { mergeContactContext, mergeMeetingContext } from "./src/entities/analysisContext";
+import { GLOBAL_MEMORY_OWNER } from "./src/entities/types";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
 import {
   isContactAction,
@@ -231,7 +232,7 @@ export default function App() {
   }, [refreshEntities]);
 
   useEffect(() => {
-    if (activeTab === "analyze") {
+    if (activeTab === "analyze" || activeTab === "memory") {
       return;
     }
 
@@ -847,22 +848,21 @@ export default function App() {
   async function addEntityMemory(
     ownerType: EntityMemory["ownerType"],
     ownerId: string,
-    kind: EntityMemory["kind"],
     content: string,
   ) {
     setEntityError(null);
     try {
-      await entityRepository.addMemory({ ownerType, ownerId, kind, content });
+      await entityRepository.addMemory({ ownerType, ownerId, content });
       await refreshEntities();
     } catch (memoryError) {
       reportEntityError(memoryError, "The memory could not be added.");
     }
   }
 
-  async function updateEntityMemory(memoryId: string, kind: EntityMemory["kind"], content: string) {
+  async function updateEntityMemory(memoryId: string, content: string) {
     setEntityError(null);
     try {
-      await entityRepository.updateMemory(memoryId, { kind, content });
+      await entityRepository.updateMemory(memoryId, { content });
       await refreshEntities();
     } catch (memoryError) {
       reportEntityError(memoryError, "The memory could not be updated.");
@@ -901,6 +901,11 @@ export default function App() {
     reset();
     setScreenshot(null);
     setNote("");
+  }
+
+  function selectMainTab(tab: MainTab) {
+    setSettingsOpen(false);
+    setActiveTab(tab);
   }
 
   async function saveProviderSettings(settings: UserVisionProvider | null) {
@@ -953,14 +958,6 @@ export default function App() {
                 {healthError ? "Analyzer offline" : providerLabel}
               </Text>
             </View>
-            <Pressable
-              accessibilityLabel="Provider settings"
-              hitSlop={6}
-              onPress={() => setSettingsOpen(true)}
-              style={({ pressed }) => [styles.settingsButton, pressed && styles.settingsButtonPressed]}
-            >
-              <Settings color={colors.text} size={19} strokeWidth={2} />
-            </Pressable>
           </View>
         </View>
       </View>
@@ -974,6 +971,21 @@ export default function App() {
             serverProvider={serverProvider}
             storage={providerSettingsStorage}
           />
+        ) : activeTab === "memory" ? (
+          <GlobalMemoryScreen
+            error={entityError}
+            loading={entityLoading}
+            memories={entityMemories.filter(
+              (memory) =>
+                memory.ownerType === GLOBAL_MEMORY_OWNER.ownerType &&
+                memory.ownerId === GLOBAL_MEMORY_OWNER.ownerId,
+            )}
+            onAdd={(content) =>
+              addEntityMemory(GLOBAL_MEMORY_OWNER.ownerType, GLOBAL_MEMORY_OWNER.ownerId, content)
+            }
+            onDelete={deleteEntityMemory}
+            onUpdate={updateEntityMemory}
+          />
         ) : activeTab === "meetings" ? (
           <MeetingsScreen
             contacts={entityContacts}
@@ -981,8 +993,8 @@ export default function App() {
             loading={entityLoading}
             meetings={entityMeetings}
             memories={entityMemories}
-            onAddMemory={(meetingId, kind, content) =>
-              addEntityMemory("meeting", meetingId, kind, content)
+            onAddMemory={(meetingId, content) =>
+              addEntityMemory("meeting", meetingId, content)
             }
             onAddParticipant={addMeetingParticipant}
             onCreate={createMeeting}
@@ -1005,8 +1017,8 @@ export default function App() {
             error={entityError}
             loading={entityLoading}
             memories={entityMemories}
-            onAddMemory={(contactId, kind, content) =>
-              addEntityMemory("contact", contactId, kind, content)
+            onAddMemory={(contactId, content) =>
+              addEntityMemory("contact", contactId, content)
             }
             onCreate={createContact}
             onDelete={deleteContact}
@@ -1067,14 +1079,14 @@ export default function App() {
         ) : null}
       </View>
 
-      {!settingsOpen ? (
-        <BottomNavigation
-          activeTab={activeTab}
-          contactCount={entityContacts.length}
-          meetingCount={entityMeetings.length}
-          onChange={setActiveTab}
-        />
-      ) : null}
+      <BottomNavigation
+        activeTab={activeTab}
+        contactCount={entityContacts.length}
+        meetingCount={entityMeetings.length}
+        onChange={selectMainTab}
+        onOpenSettings={() => setSettingsOpen(true)}
+        settingsActive={settingsOpen}
+      />
     </SafeAreaView>
   );
 }
@@ -1619,19 +1631,6 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: "flex-end",
     minWidth: 0,
-  },
-  settingsButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 6,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  settingsButtonPressed: {
-    backgroundColor: colors.surfaceMuted,
   },
   captureScroll: {
     alignItems: "center",

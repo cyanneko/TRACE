@@ -12,9 +12,13 @@ import type { EntityCommitRecord } from "./storageModel";
 
 export type EntityOwner = Pick<EntityMemory, "ownerId" | "ownerType">;
 
+export const GLOBAL_MEMORY_OWNER = {
+  ownerId: "00000000-0000-4000-8000-000000000000",
+  ownerType: "global",
+} as const satisfies EntityOwner;
+
 export type ManualMemoryInput = EntityOwner & {
   content: string;
-  kind: EntityMemory["kind"];
 };
 
 export type CommitSuccessfulActionInput = {
@@ -44,7 +48,7 @@ export interface EntityRepository {
   listMemories(owner: EntityOwner): Promise<EntityMemory[]>;
   listAllMemories(): Promise<EntityMemory[]>;
   addMemory(input: ManualMemoryInput): Promise<EntityMemory>;
-  updateMemory(memoryId: string, patch: Pick<ManualMemoryInput, "content" | "kind">): Promise<EntityMemory>;
+  updateMemory(memoryId: string, patch: Pick<ManualMemoryInput, "content">): Promise<EntityMemory>;
   deleteMemory(memoryId: string): Promise<void>;
 
   commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord>;

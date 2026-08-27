@@ -5,6 +5,7 @@ import {
   AnalyzeRequestSchema,
   AnalyzeModelOutputSchema,
   ContactRecordSchema,
+  EntityMemorySchema,
   InsightBundleSchema,
   InsightRequestSchema,
   MeetingRecordSchema,
@@ -108,7 +109,6 @@ describe("ActionCardSchema", () => {
       memoryProposals: [
         {
           target: { type: "action_entity" },
-          kind: "context",
           content: "River directly asked to continue the conversation next week.",
           evidenceRefs: ["evidence-direct-reply"],
         },
@@ -262,6 +262,40 @@ describe("entity records", () => {
 
     expect(contact.success).toBe(false);
     expect(meeting.success).toBe(false);
+  });
+
+  it("accepts a locally owned global memory", () => {
+    const memory = EntityMemorySchema.safeParse({
+      id: "0a66c15b-e77a-4607-bfd5-96b3805e2f16",
+      ownerType: "global",
+      ownerId: "00000000-0000-4000-8000-000000000000",
+      content: "Prefer concise meeting summaries.",
+      status: "active",
+      source: "manual",
+      sourceEvidenceRefs: [],
+      confidence: 1,
+      ...timestamps,
+    });
+
+    expect(memory.success).toBe(true);
+  });
+
+  it("preserves old memory content while stripping its legacy category", () => {
+    const memory = EntityMemorySchema.parse({
+      id: "1a66c15b-e77a-4607-bfd5-96b3805e2f16",
+      ownerType: "contact",
+      ownerId: "2a66c15b-e77a-4607-bfd5-96b3805e2f16",
+      kind: "preference",
+      content: "Prefers a written summary before meetings.",
+      status: "active",
+      source: "manual",
+      sourceEvidenceRefs: [],
+      confidence: 1,
+      ...timestamps,
+    });
+
+    expect(memory.content).toBe("Prefers a written summary before meetings.");
+    expect("kind" in memory).toBe(false);
   });
 });
 

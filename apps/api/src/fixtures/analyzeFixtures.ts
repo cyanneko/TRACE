@@ -40,7 +40,6 @@ const fixtures = {
         memoryProposals: [
           {
             target: { type: "action_entity" },
-            kind: "commitment",
             content: "会前向 Maya 发送新版方案。",
             evidenceRefs: ["evidence-send-deck"],
           },
@@ -87,7 +86,6 @@ const fixtures = {
         memoryProposals: [
           {
             target: { type: "action_entity" },
-            kind: "context",
             content: "林乔希望下周继续讨论合作。",
             evidenceRefs: ["evidence-new-contact"],
           },
@@ -138,7 +136,6 @@ const fixtures = {
         memoryProposals: [
           {
             target: { type: "contact", contactId: "contact-maya" },
-            kind: "context",
             content: "Maya 的沟通重点可能转向产品负责人职责。",
             evidenceRefs: ["evidence-new-role"],
           },
@@ -194,7 +191,6 @@ const fixtures = {
         memoryProposals: [
           {
             target: { type: "meeting", meetingId: "meeting-design-review" },
-            kind: "context",
             content: "Maya 因周四时间不足提出改期。",
             evidenceRefs: ["evidence-reschedule"],
           },
@@ -398,7 +394,6 @@ const fixtures = {
       memoryProposals: [
         {
           target: { type: "action_entity" as const },
-          kind: "context" as const,
           content: `${displayName} 与用户确认保持联系。`,
           evidenceRefs: [`evidence-person-${index + 1}`],
         },

@@ -38,7 +38,6 @@ function createMigratedMemory(
   memory: MemoryEntry,
   owner: Pick<EntityMemory, "ownerId" | "ownerType">,
   content: string,
-  kind: EntityMemory["kind"],
   options: MigrationOptions,
 ): EntityMemory | null {
   if (!content.trim()) {
@@ -47,7 +46,6 @@ function createMigratedMemory(
   return EntityMemorySchema.parse({
     id: options.createId(),
     ...owner,
-    kind,
     content,
     status: "active",
     source: "migration",
@@ -134,7 +132,6 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
         memory,
         { ownerType: "meeting", ownerId: meeting.id },
         text(value.notes),
-        "commitment",
         options,
       );
       if (migrated) entityMemories.push(migrated);
@@ -162,7 +159,6 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
         memory,
         { ownerType: "contact", ownerId: contact.id },
         text(value.notes),
-        "context",
         options,
       );
       if (migrated) entityMemories.push(migrated);
@@ -189,7 +185,6 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
       memory,
       { ownerType: "contact", ownerId: contact.id },
       content,
-      memory.type === "preference" ? "preference" : "context",
       options,
     );
     if (migrated) entityMemories.push(migrated);

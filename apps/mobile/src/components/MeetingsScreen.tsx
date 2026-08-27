@@ -19,15 +19,13 @@ import { colors } from "../theme";
 import { DateTimeField } from "./DateTimeField";
 import { EntityMemoryEditor } from "./EntityMemoryEditor";
 
-type MemoryKind = EntityMemory["kind"];
-
 type Props = {
   contacts: ContactRecord[];
   error: string | null;
   loading: boolean;
   meetings: MeetingRecord[];
   memories: EntityMemory[];
-  onAddMemory: (meetingId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onAddMemory: (meetingId: string, content: string) => Promise<void>;
   onAddParticipant: (meetingId: string, contactId: string) => Promise<void>;
   onCreate: () => Promise<void>;
   onCreateParticipant: (meetingId: string) => Promise<void>;
@@ -37,7 +35,7 @@ type Props = {
   onRemoveParticipant: (meetingId: string, contactId: string) => Promise<void>;
   onSave: (meeting: MeetingRecord) => Promise<void>;
   onSelect: (meetingId: string | null) => void;
-  onUpdateMemory: (memoryId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onUpdateMemory: (memoryId: string, content: string) => Promise<void>;
   selectedMeetingId: string | null;
 };
 
@@ -70,7 +68,7 @@ export function MeetingsScreen({
         memories={memories.filter(
           (memory) => memory.ownerType === "meeting" && memory.ownerId === selected.id,
         )}
-        onAddMemory={(kind, content) => onAddMemory(selected.id, kind, content)}
+        onAddMemory={(content) => onAddMemory(selected.id, content)}
         onAddParticipant={(contactId) => onAddParticipant(selected.id, contactId)}
         onBack={() => onSelect(null)}
         onCreateParticipant={() => onCreateParticipant(selected.id)}
@@ -211,7 +209,7 @@ type MeetingDetailProps = {
   error: string | null;
   meeting: MeetingRecord;
   memories: EntityMemory[];
-  onAddMemory: (kind: MemoryKind, content: string) => Promise<void>;
+  onAddMemory: (content: string) => Promise<void>;
   onAddParticipant: (contactId: string) => Promise<void>;
   onBack: () => void;
   onCreateParticipant: () => Promise<void>;
@@ -220,7 +218,7 @@ type MeetingDetailProps = {
   onOpenContact: (contactId: string) => void;
   onRemoveParticipant: (contactId: string) => Promise<void>;
   onSave: (meeting: MeetingRecord) => Promise<void>;
-  onUpdateMemory: (memoryId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onUpdateMemory: (memoryId: string, content: string) => Promise<void>;
 };
 
 function MeetingDetail({

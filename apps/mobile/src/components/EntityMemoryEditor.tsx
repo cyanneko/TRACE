@@ -5,33 +5,33 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors } from "../theme";
 
-type MemoryKind = EntityMemory["kind"];
-
 type Props = {
+  eyebrow?: string;
   memories: EntityMemory[];
-  onAdd: (kind: MemoryKind, content: string) => Promise<void>;
+  onAdd: (content: string) => Promise<void>;
   onDelete: (memoryId: string) => Promise<void>;
-  onUpdate: (memoryId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onUpdate: (memoryId: string, content: string) => Promise<void>;
+  standalone?: boolean;
+  title?: string;
 };
 
-const kinds: Array<{ label: string; value: MemoryKind }> = [
-  { label: "Context", value: "context" },
-  { label: "Preference", value: "preference" },
-  { label: "Commitment", value: "commitment" },
-  { label: "Note", value: "note" },
-];
-
-export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Props) {
+export function EntityMemoryEditor({
+  eyebrow = "MEMORY",
+  memories,
+  onAdd,
+  onDelete,
+  onUpdate,
+  standalone = false,
+  title = "Dedicated context",
+}: Props) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [kind, setKind] = useState<MemoryKind>("context");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (editingId && !memories.some((memory) => memory.id === editingId)) {
       setEditingId(null);
-      setKind("context");
       setContent("");
     }
   }, [editingId, memories]);
@@ -39,14 +39,12 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
   function cancel() {
     setAdding(false);
     setEditingId(null);
-    setKind("context");
     setContent("");
   }
 
   function edit(memory: EntityMemory) {
     setAdding(false);
     setEditingId(memory.id);
-    setKind(memory.kind);
     setContent(memory.content);
   }
 
@@ -55,8 +53,8 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
     if (!value || busy) return;
     setBusy(true);
     try {
-      if (editingId) await onUpdate(editingId, kind, value);
-      else await onAdd(kind, value);
+      if (editingId) await onUpdate(editingId, value);
+      else await onAdd(value);
       cancel();
     } finally {
       setBusy(false);
@@ -64,11 +62,11 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
   }
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, standalone && styles.sectionStandalone]}>
       <View style={styles.heading}>
         <View>
-          <Text style={styles.eyebrow}>MEMORY</Text>
-          <Text style={styles.title}>Dedicated context</Text>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={[styles.title, standalone && styles.titleStandalone]}>{title}</Text>
         </View>
         <Pressable
           accessibilityLabel="Add memory"
@@ -87,10 +85,8 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
         <MemoryForm
           busy={busy}
           content={content}
-          kind={kind}
           onCancel={cancel}
           onChangeContent={setContent}
-          onChangeKind={setKind}
           onSave={() => void save()}
         />
       ) : null}
@@ -104,16 +100,13 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
               busy={busy}
               content={content}
               key={memory.id}
-              kind={kind}
               onCancel={cancel}
               onChangeContent={setContent}
-              onChangeKind={setKind}
               onSave={() => void save()}
             />
           ) : (
             <View key={memory.id} style={styles.memoryRow}>
               <View style={styles.memoryCopy}>
-                <Text style={styles.kind}>{memory.kind}</Text>
                 <Text style={styles.content}>{memory.content}</Text>
               </View>
               <View style={styles.actions}>
@@ -145,39 +138,14 @@ export function EntityMemoryEditor({ memories, onAdd, onDelete, onUpdate }: Prop
 type MemoryFormProps = {
   busy: boolean;
   content: string;
-  kind: MemoryKind;
   onCancel: () => void;
   onChangeContent: (value: string) => void;
-  onChangeKind: (kind: MemoryKind) => void;
   onSave: () => void;
 };
 
-function MemoryForm({
-  busy,
-  content,
-  kind,
-  onCancel,
-  onChangeContent,
-  onChangeKind,
-  onSave,
-}: MemoryFormProps) {
+function MemoryForm({ busy, content, onCancel, onChangeContent, onSave }: MemoryFormProps) {
   return (
     <View style={styles.form}>
-      <View accessibilityRole="tablist" style={styles.kindPicker}>
-        {kinds.map((item) => (
-          <Pressable
-            accessibilityRole="tab"
-            accessibilityState={{ selected: kind === item.value }}
-            key={item.value}
-            onPress={() => onChangeKind(item.value)}
-            style={[styles.kindOption, kind === item.value && styles.kindOptionActive]}
-          >
-            <Text style={[styles.kindOptionText, kind === item.value && styles.kindOptionTextActive]}>
-              {item.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
       <TextInput
         maxLength={2_000}
         multiline
@@ -212,6 +180,10 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingTop: 22,
   },
+  sectionStandalone: {
+    borderTopWidth: 0,
+    paddingTop: 0,
+  },
   heading: {
     alignItems: "center",
     flexDirection: "row",
@@ -227,6 +199,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     marginTop: 3,
+  },
+  titleStandalone: {
+    fontSize: 28,
   },
   iconButton: {
     alignItems: "center",
@@ -252,14 +227,7 @@ const styles = StyleSheet.create({
   },
   memoryCopy: {
     flex: 1,
-    gap: 4,
     minWidth: 0,
-  },
-  kind: {
-    color: colors.primary,
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
   },
   content: {
     color: colors.text,
@@ -288,31 +256,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 11,
     padding: 12,
-  },
-  kindPicker: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-  },
-  kindOption: {
-    alignItems: "center",
-    borderRadius: 4,
-    flexGrow: 1,
-    minHeight: 34,
-    minWidth: 90,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-  },
-  kindOptionActive: {
-    backgroundColor: colors.primarySoft,
-  },
-  kindOptionText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  kindOptionTextActive: {
-    color: colors.primary,
   },
   input: {
     borderColor: colors.border,

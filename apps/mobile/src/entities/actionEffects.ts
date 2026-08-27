@@ -9,7 +9,7 @@ import {
 } from "@trace/contracts";
 
 import type { EntityFactoryOptions } from "./model";
-import type { CommitSuccessfulActionInput } from "./types";
+import { GLOBAL_MEMORY_OWNER, type CommitSuccessfulActionInput } from "./types";
 
 export type ActionEntityEffects = {
   contact?: ContactRecord;
@@ -202,7 +202,6 @@ function memoryFromProposal(
   return EntityMemorySchema.parse({
     id: factory.createId(),
     ...owner,
-    kind: proposal.kind,
     content: proposal.content,
     status: "active",
     source: "action",
@@ -258,7 +257,6 @@ export function deriveActionEntityEffects(
     if (!proposals.some((proposal) => proposal.content.trim() === content) && input.action.evidenceRefs.length > 0) {
       proposals.push({
         target: { type: "action_entity" },
-        kind: "context",
         content,
         evidenceRefs: input.action.evidenceRefs,
       });
@@ -270,7 +268,6 @@ export function deriveActionEntityEffects(
       if (!proposals.some((proposal) => proposal.content.trim() === change.nextValue.trim())) {
         proposals.push({
           target: { type: "action_entity" },
-          kind: "note",
           content: change.nextValue,
           evidenceRefs: input.action.evidenceRefs,
         });
@@ -282,7 +279,9 @@ export function deriveActionEntityEffects(
   let skippedMemoryProposals = 0;
   for (const proposal of proposals) {
     let owner: Pick<EntityMemory, "ownerId" | "ownerType"> | undefined;
-    if (proposal.target.type === "action_entity") {
+    if (proposal.target.type === "global") {
+      owner = GLOBAL_MEMORY_OWNER;
+    } else if (proposal.target.type === "action_entity") {
       owner = { ownerType: entityRef.type, ownerId: entityRef.id };
     } else if (proposal.target.type === "contact") {
       const target = findContact(contacts, proposal.target.contactId);

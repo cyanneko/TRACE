@@ -144,6 +144,80 @@ test("mobile no-action state stays conservative and within the viewport", async 
   expect(widths.body).toBe(widths.viewport);
 });
 
+test("global memory and settings use compact edge navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?__trace_fixture=no-action");
+
+  const memoryTab = page.getByRole("tab", { name: "Global memory" });
+  const meetingsTab = page.getByRole("tab", { name: "Meetings" });
+  const analyzeTab = page.getByRole("tab", { name: "Analyze" });
+  const contactsTab = page.getByRole("tab", { name: "Contacts" });
+  const settingsTab = page.getByRole("tab", { name: "Provider settings" });
+  const [memoryBox, meetingsBox, analyzeBox, contactsBox, settingsBox] = await Promise.all([
+    memoryTab.boundingBox(),
+    meetingsTab.boundingBox(),
+    analyzeTab.boundingBox(),
+    contactsTab.boundingBox(),
+    settingsTab.boundingBox(),
+  ]);
+
+  expect(memoryBox).not.toBeNull();
+  expect(meetingsBox).not.toBeNull();
+  expect(analyzeBox).not.toBeNull();
+  expect(contactsBox).not.toBeNull();
+  expect(settingsBox).not.toBeNull();
+  expect(memoryBox!.x).toBeLessThan(meetingsBox!.x);
+  expect(meetingsBox!.x).toBeLessThan(analyzeBox!.x);
+  expect(analyzeBox!.x).toBeLessThan(contactsBox!.x);
+  expect(contactsBox!.x).toBeLessThan(settingsBox!.x);
+  expect(memoryBox!.width).toBeLessThan(meetingsBox!.width);
+  expect(settingsBox!.width).toBeLessThan(contactsBox!.width);
+
+  await memoryTab.click();
+  await expect(memoryTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Global memory", { exact: true })).toBeVisible();
+  await page.getByLabel("Add memory").click();
+  await expect(page.getByText(/^(Context|Preference|Commitment|Note)$/)).toHaveCount(0);
+  await page.getByPlaceholder("Memory").fill("Prefer concise summaries across every thread.");
+  await page.getByLabel("Save memory").click();
+  await expect(page.getByText("Prefer concise summaries across every thread.", { exact: true })).toBeVisible();
+
+  const storedMemory = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      memories?: Array<Record<string, unknown>>;
+    };
+    const memory = state.memories?.find((item) => item.ownerType === "global");
+    return {
+      content: memory?.content,
+      hasKind: memory ? Object.hasOwn(memory, "kind") : false,
+      ownerId: memory?.ownerId,
+      ownerType: memory?.ownerType,
+    };
+  });
+  expect(storedMemory).toEqual({
+    content: "Prefer concise summaries across every thread.",
+    hasKind: false,
+    ownerId: "00000000-0000-4000-8000-000000000000",
+    ownerType: "global",
+  });
+
+  await page.getByLabel("Edit memory").click();
+  await page.getByPlaceholder("Memory").fill("Prefer short summaries across every thread.");
+  await page.getByLabel("Save memory").click();
+  await expect(page.getByText("Prefer short summaries across every thread.", { exact: true })).toBeVisible();
+
+  await settingsTab.click();
+  await expect(settingsTab).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("Vision provider", { exact: true })).toBeVisible();
+  await memoryTab.click();
+  await expect(page.getByText("Prefer short summaries across every thread.", { exact: true })).toBeVisible();
+  await page.getByLabel("Delete memory").click();
+  await expect(page.getByText("Prefer short summaries across every thread.", { exact: true })).toHaveCount(0);
+
+  const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
+  expect(widths.body).toBe(widths.viewport);
+});
+
 test("a selected screenshot can be removed without discarding its description", async ({ page }) => {
   await page.goto("/");
   await uploadScreenshot(page);

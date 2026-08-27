@@ -23,12 +23,13 @@ import {
   entityFactoryOptions,
 } from "./model";
 import { EntityCommitRecordSchema, type EntityCommitRecord } from "./storageModel";
-import type {
-  CommitSuccessfulActionInput,
-  EntityOwner,
-  EntityRepository,
-  EntityRepositoryOptions,
-  ManualMemoryInput,
+import {
+  GLOBAL_MEMORY_OWNER,
+  type CommitSuccessfulActionInput,
+  type EntityOwner,
+  type EntityRepository,
+  type EntityRepositoryOptions,
+  type ManualMemoryInput,
 } from "./types";
 
 const ENTITY_MIGRATION = "entity-memory-v2";
@@ -265,7 +266,7 @@ export class SqliteEntityRepository implements EntityRepository {
 
   async updateMemory(
     memoryId: string,
-    patch: Pick<ManualMemoryInput, "content" | "kind">,
+    patch: Pick<ManualMemoryInput, "content">,
   ): Promise<EntityMemory> {
     const database = await this.database();
     const row = await database.getFirstAsync<PayloadRow>(
@@ -370,6 +371,12 @@ export class SqliteEntityRepository implements EntityRepository {
   }
 
   private async assertOwnerExists(database: SQLiteDatabase, owner: EntityOwner): Promise<void> {
+    if (owner.ownerType === "global") {
+      if (owner.ownerId !== GLOBAL_MEMORY_OWNER.ownerId) {
+        throw new Error("Global memory owner is invalid.");
+      }
+      return;
+    }
     const table = owner.ownerType === "contact" ? "contacts" : "meetings";
     const row = await database.getFirstAsync<{ id: string }>(`SELECT id FROM ${table} WHERE id = ?`, owner.ownerId);
     if (!row) {

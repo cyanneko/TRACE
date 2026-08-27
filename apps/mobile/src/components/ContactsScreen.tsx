@@ -24,20 +24,18 @@ import { sortContacts } from "../entities/presentation";
 import { colors } from "../theme";
 import { EntityMemoryEditor } from "./EntityMemoryEditor";
 
-type MemoryKind = EntityMemory["kind"];
-
 type Props = {
   contacts: ContactRecord[];
   error: string | null;
   loading: boolean;
   memories: EntityMemory[];
-  onAddMemory: (contactId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onAddMemory: (contactId: string, content: string) => Promise<void>;
   onCreate: () => Promise<void>;
   onDelete: (contactId: string) => Promise<void>;
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onSave: (contact: ContactRecord) => Promise<void>;
   onSelect: (contactId: string | null) => void;
-  onUpdateMemory: (memoryId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onUpdateMemory: (memoryId: string, content: string) => Promise<void>;
   selectedContactId: string | null;
 };
 
@@ -64,7 +62,7 @@ export function ContactsScreen({
         memories={memories.filter(
           (memory) => memory.ownerType === "contact" && memory.ownerId === selected.id,
         )}
-        onAddMemory={(kind, content) => onAddMemory(selected.id, kind, content)}
+        onAddMemory={(content) => onAddMemory(selected.id, content)}
         onBack={() => onSelect(null)}
         onDelete={async () => {
           await onDelete(selected.id);
@@ -185,12 +183,12 @@ type ContactDetailProps = {
   contact: ContactRecord;
   error: string | null;
   memories: EntityMemory[];
-  onAddMemory: (kind: MemoryKind, content: string) => Promise<void>;
+  onAddMemory: (content: string) => Promise<void>;
   onBack: () => void;
   onDelete: () => Promise<void>;
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onSave: (contact: ContactRecord) => Promise<void>;
-  onUpdateMemory: (memoryId: string, kind: MemoryKind, content: string) => Promise<void>;
+  onUpdateMemory: (memoryId: string, content: string) => Promise<void>;
 };
 
 function ContactDetail({

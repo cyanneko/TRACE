@@ -66,7 +66,7 @@ export function createManualMemory(options: EntityFactoryOptions, input: ManualM
 export function applyManualMemoryUpdate(
   options: EntityFactoryOptions,
   memory: EntityMemory,
-  patch: Pick<ManualMemoryInput, "content" | "kind">,
+  patch: Pick<ManualMemoryInput, "content">,
 ): EntityMemory {
   return EntityMemorySchema.parse({
     ...memory,
