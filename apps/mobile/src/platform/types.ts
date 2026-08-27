@@ -1,7 +1,6 @@
 import type { ContactSource } from "../contacts/types";
 import type { EntityRepository } from "../entities/types";
 import type { ActionExecutor } from "../execution/types";
-import type { MemoryRepository } from "../memory/types";
 import type { MeetingSource } from "../meetings/types";
 
 export type PlatformCapabilities = {
@@ -9,14 +8,12 @@ export type PlatformCapabilities = {
   calendar: "demo" | "read-write";
   contacts: "demo" | "native";
   entities: "local-storage" | "sqlite";
-  memory: "local-storage" | "sqlite";
 };
 
 export type PlatformServices = {
   contacts: ContactSource;
   entities: EntityRepository;
   executor: ActionExecutor;
-  memories: MemoryRepository;
   meetings: MeetingSource;
   capabilities: PlatformCapabilities;
 };

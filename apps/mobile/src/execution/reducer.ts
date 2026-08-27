@@ -1,11 +1,8 @@
-import type { InsightResult, MemoryEntry, ToolResult } from "@trace/contracts";
+import type { InsightResult, ToolResult } from "@trace/contracts";
 
 export type ExecutionState = {
   status: "idle" | "running" | "insighting" | "complete" | "failed" | "partial";
   results: ToolResult[];
-  activeMemories: MemoryEntry[];
-  writtenMemoryIds: string[];
-  supersededMemoryIds: string[];
   globalMemoryChangeCount: number;
   globalMemoryOperationCount: number;
   globalMemorySkippedCount: number;
@@ -16,9 +13,6 @@ export type ExecutionState = {
 export const initialExecutionState: ExecutionState = {
   status: "idle",
   results: [],
-  activeMemories: [],
-  writtenMemoryIds: [],
-  supersededMemoryIds: [],
   globalMemoryChangeCount: 0,
   globalMemoryOperationCount: 0,
   globalMemorySkippedCount: 0,
@@ -31,9 +25,6 @@ export type ExecutionEvent =
   | {
       type: "EXECUTED";
       results: ToolResult[];
-      activeMemories: MemoryEntry[];
-      writtenMemoryIds: string[];
-      supersededMemoryIds: string[];
     }
   | { type: "INSIGHTS_START" }
   | {
@@ -44,7 +35,6 @@ export type ExecutionEvent =
       globalMemorySkippedCount: number;
     }
   | { type: "FAILED"; error: string }
-  | { type: "MEMORY_DELETED"; memoryId: string }
   | { type: "RESET" };
 
 export function executionReducer(state: ExecutionState, event: ExecutionEvent): ExecutionState {
@@ -56,9 +46,6 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
         ...state,
         status: "insighting",
         results: event.results,
-        activeMemories: event.activeMemories,
-        writtenMemoryIds: event.writtenMemoryIds,
-        supersededMemoryIds: event.supersededMemoryIds,
       };
     case "INSIGHTS_START":
       return { ...state, status: "insighting", error: null };
@@ -77,12 +64,6 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
         ...state,
         status: state.results.length > 0 ? "partial" : "failed",
         error: event.error,
-      };
-    case "MEMORY_DELETED":
-      return {
-        ...state,
-        activeMemories: state.activeMemories.filter((memory) => memory.id !== event.memoryId),
-        writtenMemoryIds: state.writtenMemoryIds.filter((id) => id !== event.memoryId),
       };
     case "RESET":
       return initialExecutionState;

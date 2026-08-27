@@ -160,9 +160,9 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   const firstRun = await page.evaluate(() => ({
     entities: JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}").memories?.length ?? 0,
     events: JSON.parse(localStorage.getItem("trace.demo.action-events.v1") ?? "[]").length,
-    memories: JSON.parse(localStorage.getItem("trace.memories.v1") ?? "[]").length,
+    legacyMemoryRemoved: localStorage.getItem("trace.memories.v1") === null,
   }));
-  expect(firstRun).toEqual({ entities: 1, events: 1, memories: 1 });
+  expect(firstRun).toEqual({ entities: 1, events: 1, legacyMemoryRemoved: true });
 
   await page.setViewportSize({ width: 390, height: 844 });
   const analyzeTab = page.getByRole("tab", { name: "Analyze" });
@@ -219,21 +219,20 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
 
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
   const secondRun = await page.evaluate(() => {
-    const memories = JSON.parse(localStorage.getItem("trace.memories.v1") ?? "[]") as Array<{ status: string }>;
     const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
       contacts?: unknown[];
       meetings?: unknown[];
       memories?: Array<{ status: string }>;
     };
     return {
-      activeMemories: memories.filter((memory) => memory.status === "active").length,
       contacts: entities.contacts?.length ?? 0,
       entityMemories: entities.memories?.filter((memory) => memory.status === "active").length ?? 0,
       events: JSON.parse(localStorage.getItem("trace.demo.action-events.v1") ?? "[]").length,
+      legacyMemoryRemoved: localStorage.getItem("trace.memories.v1") === null,
       meetings: entities.meetings?.length ?? 0,
     };
   });
-  expect(secondRun).toMatchObject({ activeMemories: 3, events: 2 });
+  expect(secondRun).toMatchObject({ events: 2, legacyMemoryRemoved: true });
   expect(secondRun.contacts).toBeGreaterThanOrEqual(2);
   expect(secondRun.meetings).toBeGreaterThanOrEqual(1);
   expect(secondRun.entityMemories).toBeGreaterThanOrEqual(2);

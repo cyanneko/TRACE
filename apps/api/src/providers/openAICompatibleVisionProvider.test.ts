@@ -15,7 +15,6 @@ const input: AnalyzeRequest = {
   contacts: [],
   currentTime: "2026-08-26T03:30:00.000Z",
   entityMemories: [],
-  memories: [],
   meetings: [],
   note: "",
   reviewFeedback: "",

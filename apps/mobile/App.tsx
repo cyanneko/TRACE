@@ -6,7 +6,6 @@ import {
   type ContactRecord,
   type ContactSummary,
   type EntityMemory,
-  type MemoryEntry,
   type MeetingRecord,
   type ProviderInfo,
   type ThreadContext,
@@ -63,7 +62,6 @@ import {
 import { executeAndCommit } from "./src/execution/executeAndCommit";
 import { executionReducer, initialExecutionState } from "./src/execution/reducer";
 import { pickScreenshot, type SelectedScreenshot } from "./src/lib/pickScreenshot";
-import { deriveMemoryCandidates } from "./src/memory/policy";
 import { DemoMeetingSource } from "./src/meetings/demoMeetingSource";
 import { createPlatformServices } from "./src/platform/services";
 import { describeUserVisionProvider } from "./src/providerSettings/model";
@@ -118,7 +116,6 @@ export default function App() {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
   const [entityContacts, setEntityContacts] = useState<ContactRecord[]>([]);
   const [entityMeetings, setEntityMeetings] = useState<MeetingRecord[]>([]);
   const [entityMemories, setEntityMemories] = useState<EntityMemory[]>([]);
@@ -137,7 +134,6 @@ export default function App() {
   const fixtureActionExecutor = useMemo(() => new DemoActionExecutor(), []);
   const actionExecutor = platformServices.executor;
   const entityRepository = platformServices.entities;
-  const memoryRepository = platformServices.memories;
 
   const refreshEntities = useCallback(async () => {
     setEntityLoading(true);
@@ -204,28 +200,6 @@ export default function App() {
       active = false;
     };
   }, [providerSettingsRepository]);
-
-  useEffect(() => {
-    let active = true;
-    setActiveMemories([]);
-
-    void memoryRepository
-      .listActive()
-      .then((memories) => {
-        if (active) {
-          setActiveMemories(memories);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setError("Saved memories could not be opened.");
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [memoryRepository]);
 
   useEffect(() => {
     void refreshEntities();
@@ -307,8 +281,7 @@ export default function App() {
     const currentTime = new Date().toISOString();
     const fixtureId = activeTestFixtureId();
     const useFixture = Boolean(fixtureId && (provider?.fixture ?? true));
-    const [memories, sourceContacts, sourceMeetings] = await Promise.all([
-      memoryRepository.listActive(),
+    const [sourceContacts, sourceMeetings] = await Promise.all([
       useFixture ? fixtureContactSource.list() : platformServices.contacts.list(),
       (useFixture ? fixtureMeetingSource : platformServices.meetings).list(currentTime),
     ]);
@@ -333,7 +306,6 @@ export default function App() {
       entityMemories: currentEntityMemories,
       fixtureId: useFixture ? fixtureId : undefined,
       meetings,
-      memories,
       note,
       priorThread,
       reviewFeedback: feedback,
@@ -347,7 +319,6 @@ export default function App() {
       currentEntityMemories,
       localContacts,
       localMeetings,
-      memories,
       result,
     };
   }
@@ -371,7 +342,6 @@ export default function App() {
       const contactCards = orderActionsForExecution(contactPass.result.actionCards).filter(isContactAction);
       setAnalysis(contactPass.result);
       setAnalysisContacts(contactPass.contacts);
-      setActiveMemories(contactPass.memories);
       setEntityContacts(contactPass.localContacts);
       setEntityMeetings(contactPass.localMeetings);
       setEntityMemories(contactPass.currentEntityMemories);
@@ -472,23 +442,10 @@ export default function App() {
     results: ToolResult[],
     currentContacts: ContactSummary[] = analysisContacts,
   ) {
-    const now = new Date().toISOString();
-    const candidates = deriveMemoryCandidates({
-      sourceRunId: currentAnalysis.runId,
-      actions: confirmedActions,
-      results,
-      now,
-    });
-    const merged = await memoryRepository.apply(candidates);
-    const currentMemories = merged.entries.filter((memory) => memory.status === "active");
     dispatchExecution({
       type: "EXECUTED",
       results,
-      activeMemories: currentMemories,
-      writtenMemoryIds: merged.writtenMemoryIds,
-      supersededMemoryIds: merged.supersededMemoryIds,
     });
-    setActiveMemories(currentMemories);
     setPhase("result");
 
     try {
@@ -535,7 +492,6 @@ export default function App() {
       const linkedAnalysis = { ...combined, actionCards: orderedCards };
       setAnalysis(linkedAnalysis);
       setAnalysisContacts(meetingPass.contacts);
-      setActiveMemories(meetingPass.memories);
       setEntityContacts(meetingPass.localContacts);
       setEntityMeetings(meetingPass.localMeetings);
       setEntityMemories(meetingPass.currentEntityMemories);
@@ -702,7 +658,6 @@ export default function App() {
         const contactCards = orderActionsForExecution(contactPass.result.actionCards).filter(isContactAction);
         setAnalysis(contactPass.result);
         setAnalysisContacts(contactPass.contacts);
-        setActiveMemories(contactPass.memories);
         setEntityContacts(contactPass.localContacts);
         setEntityMeetings(contactPass.localMeetings);
         setEntityMemories(contactPass.currentEntityMemories);

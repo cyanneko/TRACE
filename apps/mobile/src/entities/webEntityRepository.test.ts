@@ -3,7 +3,7 @@ import {
   USER_NOTE_EVIDENCE_ID,
   type CreateContactCard,
   type CreateMeetingCard,
-  type MemoryEntry,
+  type LegacyMemoryEntry,
   type UpdateContactCard,
   type UpdateMeetingCard,
 } from "@trace/contracts";
@@ -214,6 +214,24 @@ describe("WebEntityRepository", () => {
     ).resolves.toMatchObject({ skippedOperations: 0 });
   });
 
+  it("removes the legacy memory copy when the current entity store already exists", async () => {
+    const store = memoryStore({
+      [ENTITY_STORAGE_KEY]: JSON.stringify({
+        version: 2,
+        contacts: [],
+        meetings: [],
+        memories: [],
+        entityCommits: [],
+        globalMemoryCommits: [],
+      }),
+      [LEGACY_MEMORY_STORAGE_KEY]: "[]",
+    });
+
+    await repository(store).initialize();
+
+    expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBeNull();
+  });
+
   it("moves saved entity notes into dedicated memory exactly once", async () => {
     const contactId = "10000000-0000-4000-8000-000000000011";
     const meetingId = "10000000-0000-4000-8000-000000000012";
@@ -271,8 +289,8 @@ describe("WebEntityRepository", () => {
     expect(persisted.meetings[0]).not.toHaveProperty("notes");
   });
 
-  it("migrates legacy contact and meeting memory without deleting v1 data", async () => {
-    const legacy: MemoryEntry[] = [
+  it("migrates legacy contact and meeting memory, then removes v1 data", async () => {
+    const legacy: LegacyMemoryEntry[] = [
       {
         id: "10000000-0000-4000-8000-000000000001",
         contactId: "native-maya",
@@ -336,7 +354,7 @@ describe("WebEntityRepository", () => {
     expect(await entities.listMemories({ ownerType: "meeting", ownerId: meetings[0]!.id })).toEqual([
       expect.objectContaining({ content: "Send the deck first." }),
     ]);
-    expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBe(legacyJson);
+    expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBeNull();
   });
 
   it("commits a successful meeting and its proposed memory exactly once", async () => {

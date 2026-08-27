@@ -9,7 +9,6 @@ function request(actionScope: AnalyzeRequest["actionScope"]): AnalyzeRequest {
     actionScope,
     note: "I am Kai. Lina HR invited me to an interview.",
     contacts: [],
-    memories: [],
     meetings: [],
     entityMemories: [],
     reviewFeedback: "",

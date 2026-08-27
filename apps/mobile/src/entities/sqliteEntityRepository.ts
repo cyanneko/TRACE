@@ -1,12 +1,12 @@
 import {
   ContactRecordSchema,
   EntityMemorySchema,
-  MemoryEntrySchema,
+  LegacyMemoryEntrySchema,
   MeetingRecordSchema,
   type ContactRecord,
   type ContactSummary,
   type EntityMemory,
-  type MemoryEntry,
+  type LegacyMemoryEntry,
   type MeetingRecord,
   type MeetingSummary,
 } from "@trace/contracts";
@@ -403,8 +403,15 @@ export class SqliteEntityRepository implements EntityRepository {
       ENTITY_MIGRATION,
     );
     if (!existing) {
-      const rows = await database.getAllAsync<PayloadRow>("SELECT payload FROM memory_entries");
-      const legacy = parseRows<MemoryEntry>(rows, (input) => MemoryEntrySchema.safeParse(input));
+      const legacyTable = await database.getFirstAsync<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memory_entries'",
+      );
+      const rows = legacyTable
+        ? await database.getAllAsync<PayloadRow>("SELECT payload FROM memory_entries")
+        : [];
+      const legacy = parseRows<LegacyMemoryEntry>(rows, (input) =>
+        LegacyMemoryEntrySchema.safeParse(input),
+      );
       const migratedAt = this.factory.now();
       const migrated = migrateLegacyMemories(legacy, { createId: this.factory.createId, migratedAt });
 
@@ -419,6 +426,8 @@ export class SqliteEntityRepository implements EntityRepository {
         );
       });
     }
+
+    await database.execAsync("DROP TABLE IF EXISTS memory_entries");
 
     await this.migrateStoredEntityNotes(database);
   }

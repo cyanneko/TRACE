@@ -19,7 +19,6 @@ export function buildAnalyzePrompt(input: AnalyzeRequest): string {
     contacts: input.contacts,
     meetings: input.meetings,
     entityMemories: input.entityMemories.filter((memory) => memory.status === "active"),
-    legacyMemories: input.memories.filter((memory) => memory.status === "active"),
     inputMode: input.screenshotDataUrl ? "screenshot_with_optional_description" : "description_only",
     priorThread: input.priorThread,
     reviewFeedback: input.reviewFeedback,

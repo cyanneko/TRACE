@@ -9,9 +9,6 @@ describe("executionReducer", () => {
     const executed = executionReducer(running, {
       type: "EXECUTED",
       results: [{ actionId: "action-1", success: true, provider: "demo", externalId: "event-1" }],
-      activeMemories: [],
-      writtenMemoryIds: [],
-      supersededMemoryIds: [],
     });
     const failed = executionReducer(executed, { type: "FAILED", error: "Insights unavailable" });
 

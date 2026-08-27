@@ -14,16 +14,6 @@ async function openTraceDatabase(): Promise<SQLiteDatabase> {
       executed_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS memory_entries (
-      id TEXT PRIMARY KEY NOT NULL,
-      payload TEXT NOT NULL,
-      status TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS memory_status_updated_idx
-      ON memory_entries(status, updated_at DESC);
-
     CREATE TABLE IF NOT EXISTS contacts (
       id TEXT PRIMARY KEY NOT NULL,
       external_contact_id TEXT,

@@ -1,12 +1,12 @@
 import {
   ContactRecordSchema,
   EntityMemorySchema,
-  MemoryEntrySchema,
+  LegacyMemoryEntrySchema,
   MeetingRecordSchema,
   type ContactRecord,
   type ContactSummary,
   type EntityMemory,
-  type MemoryEntry,
+  type LegacyMemoryEntry,
   type MeetingRecord,
   type MeetingSummary,
 } from "@trace/contracts";
@@ -44,7 +44,7 @@ import {
 export const ENTITY_STORAGE_KEY = "trace.entities.v2";
 export const LEGACY_MEMORY_STORAGE_KEY = "trace.memories.v1";
 
-const LegacyMemoriesSchema = MemoryEntrySchema.array();
+const LegacyMemoriesSchema = LegacyMemoryEntrySchema.array();
 
 type Options = EntityRepositoryOptions & {
   store?: KeyValueStore;
@@ -343,12 +343,13 @@ export class WebEntityRepository implements EntityRepository {
       }
       const migrated = migrateEntityNotes(raw, parsed.data, this.factory);
       if (migrated.changed) this.write(migrated.store);
+      this.store.removeItem(LEGACY_MEMORY_STORAGE_KEY);
       return migrated.store;
     }
 
     const migratedAt = this.factory.now();
     const legacySerialized = this.store.getItem(LEGACY_MEMORY_STORAGE_KEY);
-    let legacyMemories: MemoryEntry[] = [];
+    let legacyMemories: LegacyMemoryEntry[] = [];
     if (legacySerialized) {
       try {
         const parsed = LegacyMemoriesSchema.safeParse(JSON.parse(legacySerialized));
@@ -362,6 +363,7 @@ export class WebEntityRepository implements EntityRepository {
       migratedAt,
     });
     this.write(migrated);
+    this.store.removeItem(LEGACY_MEMORY_STORAGE_KEY);
     return migrated;
   }
 

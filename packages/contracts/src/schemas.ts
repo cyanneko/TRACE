@@ -381,7 +381,6 @@ export const AnalyzeRequestSchema = z
     screenshotDataUrl: ScreenshotDataUrlSchema.optional(),
     note: z.string().trim().max(2_000).default(""),
     contacts: z.array(ContactSummarySchema).max(200).default([]),
-    memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
     meetings: z.array(MeetingSummarySchema).max(200).default([]),
     entityMemories: z.array(EntityMemorySchema).max(300).default([]),
     actionScope: AnalysisScopeSchema.default("all"),
@@ -425,7 +424,7 @@ export const ActionExecutionRecordSchema = z.object({
   executedAt: z.iso.datetime(),
 });
 
-export const MemoryEntrySchema = z.object({
+export const LegacyMemoryEntrySchema = z.object({
   id: z.uuid(),
   contactId: z.string().optional(),
   type: z.enum(["contact_fact", "preference", "open_loop", "relationship_fact"]),
@@ -543,7 +542,7 @@ export type EntityMemory = z.infer<typeof EntityMemorySchema>;
 export type FixtureId = z.infer<typeof FixtureIdSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type ActionExecutionRecord = z.infer<typeof ActionExecutionRecordSchema>;
-export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
+export type LegacyMemoryEntry = z.infer<typeof LegacyMemoryEntrySchema>;
 export type Insight = z.infer<typeof InsightSchema>;
 export type GlobalMemoryOperation = z.infer<typeof GlobalMemoryOperationSchema>;
 export type InsightBundle = z.infer<typeof InsightBundleSchema>;

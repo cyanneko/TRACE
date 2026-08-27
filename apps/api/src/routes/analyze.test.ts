@@ -35,7 +35,6 @@ function createFailingServer(error: Error) {
 const validPayload = {
   screenshotDataUrl: onePixelPng,
   contacts: [],
-  memories: [],
   timezone: "Asia/Shanghai",
   currentTime: "2026-08-26T03:30:00.000Z",
 };
@@ -49,7 +48,6 @@ describe("POST /v1/analyze", () => {
         screenshotDataUrl: onePixelPng,
         note: "Maya is in my contacts.",
         contacts: [],
-        memories: [],
         timezone: "Asia/Shanghai",
         currentTime: "2026-08-26T03:30:00.000Z",
         fixtureId: "meeting",
@@ -77,7 +75,6 @@ describe("POST /v1/analyze", () => {
       payload: {
         screenshotDataUrl: onePixelPng,
         contacts: [],
-        memories: [],
         timezone: "Asia/Shanghai",
         currentTime: "2026-08-26T03:30:00.000Z",
         fixtureId: "no-action",
@@ -206,7 +203,6 @@ describe("POST /v1/analyze", () => {
       payload: {
         screenshotDataUrl: onePixelPng,
         contacts: [],
-        memories: [],
         timezone: "Asia/Shanghai",
         currentTime: "2026-08-26T03:30:00.000Z",
         fixtureId: "meeting",
@@ -229,7 +225,6 @@ describe("POST /v1/analyze", () => {
       payload: {
         screenshotDataUrl: "data:text/plain;base64,aGVsbG8=",
         contacts: [],
-        memories: [],
         timezone: "Asia/Shanghai",
         currentTime: "2026-08-26T03:30:00.000Z",
       },

@@ -747,6 +747,30 @@ npm run build:web
 
 Commit: `fix(actions): resolve local targets before execution`
 
+## Iteration 30 - Remove Legacy Memory Pipeline
+
+Status: completed
+
+- [x] Preserve Iteration 29 as `pre-iteration-30-remove-legacy-memory` before editing.
+- [x] Remove legacy memory from the analysis request contract and model prompt.
+- [x] Stop reading, deriving, and writing legacy memory in the App execution flow.
+- [x] Remove the legacy memory repositories, reducer state, and unused memory screen.
+- [x] Migrate v1-only installs once, then remove the Web key and SQLite table.
+- [x] Update regression coverage around the single Entity Memory system.
+- [x] Run unit tests, browser tests, Web build, and iOS export.
+- [x] Publish the iteration to GitHub.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+(cd apps/mobile && npx expo export --platform ios)
+```
+
+Commit: `refactor(memory): remove legacy memory pipeline`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

@@ -1,10 +1,11 @@
 import {
   ContactRecordSchema,
   EntityMemorySchema,
+  LegacyMemoryEntrySchema,
   MeetingRecordSchema,
   type ContactRecord,
   type EntityMemory,
-  type MemoryEntry,
+  type LegacyMemoryEntry,
   type MeetingRecord,
 } from "@trace/contracts";
 
@@ -15,7 +16,7 @@ type MigrationOptions = {
   migratedAt: string;
 };
 
-function recordValue(memory: MemoryEntry): Record<string, unknown> {
+function recordValue(memory: LegacyMemoryEntry): Record<string, unknown> {
   return typeof memory.value === "object" && memory.value !== null
     ? (memory.value as Record<string, unknown>)
     : { value: memory.value };
@@ -35,7 +36,7 @@ function isoDate(value: unknown): string | undefined {
 }
 
 function createMigratedMemory(
-  memory: MemoryEntry,
+  memory: LegacyMemoryEntry,
   owner: Pick<EntityMemory, "ownerId" | "ownerType">,
   content: string,
   options: MigrationOptions,
@@ -58,7 +59,7 @@ function createMigratedMemory(
   });
 }
 
-export function migrateLegacyMemories(memories: MemoryEntry[], options: MigrationOptions): EntityStore {
+export function migrateLegacyMemories(memories: LegacyMemoryEntry[], options: MigrationOptions): EntityStore {
   const contacts: ContactRecord[] = [];
   const meetings: MeetingRecord[] = [];
   const entityMemories: EntityMemory[] = [];

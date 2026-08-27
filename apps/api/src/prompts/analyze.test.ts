@@ -10,7 +10,6 @@ const input: AnalyzeRequest = {
   note: "",
   reviewFeedback: "",
   contacts: [],
-  memories: [],
   meetings: [
     {
       id: "meeting-review",
@@ -66,6 +65,7 @@ describe("buildAnalyzePrompt", () => {
 
     expect(prompt).toContain("Design review");
     expect(prompt).toContain("Send the deck before the review");
+    expect(prompt).not.toContain("legacyMemories");
   });
 
   it("focuses the first pass on contacts and the second pass on confirmed meeting participants", () => {
