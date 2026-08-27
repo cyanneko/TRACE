@@ -646,6 +646,30 @@ npx expo export --platform ios
 
 Commit: `feat(insights): consolidate global memory after execution`
 
+## Iteration 26 - Zero-Action Insight Continuation
+
+Status: completed
+
+- [x] Preserve Iteration 25 as `iteration-25-model-insights-global-memory` before editing.
+- [x] Let an empty meeting pass continue to Insight generation even when no contact action was confirmed.
+- [x] Treat empty confirmed-action and tool-result arrays as a valid completed analysis path.
+- [x] Let failed Insight generation be retried after a zero-write analysis.
+- [x] Present zero-write results as analysis rather than successful Demo or device execution.
+- [x] Cover a description-only Global Memory request from input through local persistence.
+- [x] Run regression checks, Web build, iOS export, and mobile visual verification.
+- [x] Publish the iteration to GitHub.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+(cd apps/mobile && npx expo export --platform ios)
+```
+
+Commit: `fix(workflow): continue zero-action threads to insights`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

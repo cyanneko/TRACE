@@ -352,6 +352,28 @@ describe("InsightBundleSchema", () => {
 });
 
 describe("InsightRequestSchema", () => {
+  it("accepts a grounded thread with no confirmed actions or tool results", () => {
+    const result = InsightRequestSchema.safeParse({
+      sourceRunId: "2f887426-3d1f-4b68-a6bc-58e975ac35fb",
+      note: "Remember that I prefer concise follow-ups.",
+      thread: {
+        summary: "The user stated a durable communication preference.",
+        participants: [],
+        evidence: [{ id: "evidence-1", quote: "I prefer concise follow-ups." }],
+        uncertainties: [],
+      },
+      confirmedActions: [],
+      toolResults: [],
+      entityMemories: [],
+      contacts: [],
+      meetings: [],
+      timezone: "Asia/Shanghai",
+      currentTime: "2026-08-26T03:30:00.000Z",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects tool results that were not confirmed in the same run", () => {
     const result = InsightRequestSchema.safeParse({
       sourceRunId: "2f887426-3d1f-4b68-a6bc-58e975ac35fb",

@@ -552,7 +552,9 @@ export default function App() {
     const selectedCards = stageCards.filter((card) => selectedIds.has(card.id));
     const validatedCards = selectedCards.map((card) => ActionCardSchema.safeParse(card));
     const canContinueWithoutStageActions =
-      reviewStage === "contacts" || stagedActionsRef.current.length > 0;
+      reviewStage === "contacts" ||
+      stagedActionsRef.current.length > 0 ||
+      (reviewStage === "meetings" && stageCards.length === 0);
     if (selectedCards.length === 0 && !canContinueWithoutStageActions) {
       setError("Select at least one action to continue.");
       return;
@@ -567,8 +569,7 @@ export default function App() {
     if (
       reviewStage === "meetings" &&
       selectedCards.length === 0 &&
-      stagedActionsRef.current.length > 0 &&
-      !cards.some(isMeetingAction)
+      stageCards.length === 0
     ) {
       try {
         await finishExecution(
@@ -695,7 +696,7 @@ export default function App() {
   }
 
   async function retryInsights() {
-    if (!analysis || execution.results.length === 0) {
+    if (!analysis) {
       return;
     }
 
@@ -1332,15 +1333,15 @@ function ReviewScreen({
   const stageCards = cards.filter(stage === "contacts" ? isContactAction : isMeetingAction);
   const selectedStageCount = stageCards.filter((card) => selectedIds.has(card.id)).length;
   const hasContactStage = cards.some(isContactAction);
-  const emptyMeetingStage =
-    stage === "meetings" && stageCards.length === 0 && confirmedActionCount > 0;
-  const stagedFlow = stage === "contacts" || hasContactStage || confirmedActionCount > 0;
+  const emptyMeetingStage = stage === "meetings" && stageCards.length === 0;
   const reviewBusy = confirming || retrying;
   const canConfirm =
-    stage === "contacts" || selectedStageCount > 0 || confirmedActionCount > 0;
+    stage === "contacts" || selectedStageCount > 0 || confirmedActionCount > 0 || emptyMeetingStage;
   const confirmLabel =
     emptyMeetingStage
-      ? "Finish with contacts"
+      ? confirmedActionCount > 0
+        ? "Finish with contacts"
+        : "Continue to insights"
       : stage === "contacts"
         ? selectedStageCount > 0
           ? "Confirm contacts and analyze meetings"
@@ -1417,7 +1418,7 @@ function ReviewScreen({
         <View style={styles.actionsHeading}>
           <View style={styles.actionsHeadingCopy}>
             <Text style={styles.sectionLabel}>
-              {stagedFlow ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
+              {stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2"}
             </Text>
             <Text style={styles.actionStageTitle}>{stage === "contacts" ? "Contacts" : "Meetings"}</Text>
             {stageCards.length > 0 ? (
@@ -1465,12 +1466,18 @@ function ReviewScreen({
           </View>
         ) : emptyMeetingStage ? (
           <View style={styles.noActionState}>
-            <RotateCcw color={colors.blue} size={28} strokeWidth={1.8} />
+            <ShieldCheck color={colors.primary} size={28} strokeWidth={1.8} />
             <Text style={styles.noActionTitle}>
-              {error ? "Meeting analysis needs another try" : "No meeting action found"}
+              {error
+                ? "Meeting analysis needs another try"
+                : confirmedActionCount > 0
+                  ? "No meeting action found"
+                  : "No contact or meeting write needed"}
             </Text>
             <Text style={styles.noActionCopy}>
-              Confirmed contacts remain saved. Revise this pass or finish with those contacts.
+              {confirmedActionCount > 0
+                ? "Confirmed contacts remain saved. Revise this pass or finish with those contacts."
+                : "Continue so TRACE can generate insights and consolidate Global Memory from this thread."}
             </Text>
           </View>
         ) : (
@@ -1521,13 +1528,15 @@ function ReviewScreen({
 
         {error ? <ErrorBanner message={error} /> : null}
 
-        {cards.length > 0 || stage === "contacts" ? (
+        {cards.length > 0 || stage === "contacts" || emptyMeetingStage ? (
           <View style={styles.confirmationBoundary}>
             <View style={styles.confirmationCopy}>
               <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
               <Text style={styles.confirmationDetail}>
                 {emptyMeetingStage
-                  ? "No meeting write is selected. Revise the meeting pass above, or finish with the confirmed contacts."
+                  ? confirmedActionCount > 0
+                    ? "No meeting write is selected. Revise the meeting pass above, or finish with the confirmed contacts."
+                    : "No contact or meeting write is needed. Continue to generate insights and apply any grounded Global Memory changes."
                   : stage === "contacts" && selectedStageCount === 0
                     ? "No contact writes are selected. TRACE will continue with the meeting pass."
                   : `${selectedStageCount} selected ${stage === "contacts" ? "contact" : "meeting"} action(s) will be written by the ${executionMode === "demo" ? "Demo" : "iOS"} executor. Unselected cards stay untouched.`}

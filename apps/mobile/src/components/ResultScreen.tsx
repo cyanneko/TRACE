@@ -48,6 +48,7 @@ export function ResultScreen({
   onRetryInsights,
 }: Props) {
   const [copiedInsight, setCopiedInsight] = useState<number | null>(null);
+  const hasWrites = execution.results.length > 0;
   const evidenceById = useMemo(
     () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
     [analysis.thread.evidence],
@@ -69,23 +70,29 @@ export function ResultScreen({
             <ArrowLeft color={colors.text} size={21} strokeWidth={2} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>EXECUTION</Text>
-            <Text style={styles.title}>Actions confirmed</Text>
+            <Text style={styles.eyebrow}>{hasWrites ? "EXECUTION" : "ANALYSIS"}</Text>
+            <Text style={styles.title}>{hasWrites ? "Actions confirmed" : "Analysis complete"}</Text>
             <Text style={styles.lede}>
-              TRACE used successful {executionMode === "demo" ? "Demo" : "device"} writes to update context before generating help.
+              {hasWrites
+                ? `TRACE used successful ${executionMode === "demo" ? "Demo" : "device"} writes to update context before generating help.`
+                : "No contact or meeting write was needed. TRACE used the thread and current memory context to generate help."}
             </Text>
           </View>
           <View style={styles.demoBadge}>
-            <Text style={styles.demoBadgeText}>{executionMode === "demo" ? "Demo writes" : "Device writes"}</Text>
+            <Text style={styles.demoBadgeText}>
+              {hasWrites ? (executionMode === "demo" ? "Demo writes" : "Device writes") : "No writes"}
+            </Text>
           </View>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeading}>
-            <View>
+            <View style={styles.sectionHeadingCopy}>
               <Text style={styles.sectionLabel}>Execution results</Text>
               <Text style={styles.sectionTitle}>
-                {execution.results.filter((result) => result.success).length} of {execution.results.length} succeeded
+                {hasWrites
+                  ? `${execution.results.filter((result) => result.success).length} of ${execution.results.length} succeeded`
+                  : "No writes needed"}
               </Text>
             </View>
             <CheckCircle2 color={colors.primary} size={23} strokeWidth={2} />
@@ -123,9 +130,11 @@ export function ResultScreen({
 
         <View style={styles.section}>
           <View style={styles.sectionHeading}>
-            <View>
+            <View style={styles.sectionHeadingCopy}>
               <Text style={styles.sectionLabel}>Agent insights</Text>
-              <Text style={styles.sectionTitle}>What helps after the write</Text>
+              <Text style={styles.sectionTitle}>
+                {hasWrites ? "What helps after the write" : "What helps from this thread"}
+              </Text>
             </View>
             {execution.status === "insighting" ? (
               <ActivityIndicator color={colors.primary} size="small" />
@@ -137,7 +146,11 @@ export function ResultScreen({
           {execution.status === "insighting" ? (
             <View style={styles.loadingBand}>
               <Text style={styles.loadingTitle}>Connecting actions, evidence and memory</Text>
-              <Text style={styles.loadingCopy}>The writes are complete. TRACE is preparing grounded help and consolidating global memory.</Text>
+              <Text style={styles.loadingCopy}>
+                {hasWrites
+                  ? "The writes are complete. TRACE is preparing grounded help and consolidating global memory."
+                  : "TRACE is preparing grounded help and consolidating global memory from this thread."}
+              </Text>
             </View>
           ) : null}
 
@@ -221,6 +234,20 @@ export function ResultScreen({
                   </View>
                 </View>
               ) : null}
+            </View>
+          ) : null}
+
+          {execution.status === "complete" &&
+          execution.insights &&
+          execution.insights.insights.length === 0 &&
+          execution.insights.unresolvedQuestions.length === 0 ? (
+            <View style={styles.loadingBand}>
+              <Text style={styles.loadingTitle}>Thread processed</Text>
+              <Text style={styles.loadingCopy}>
+                {execution.globalMemoryChangeCount > 0
+                  ? "Global Memory was updated. No separate follow-up suggestion was needed."
+                  : "No additional follow-up suggestion was needed for this thread."}
+              </Text>
             </View>
           ) : null}
 
@@ -311,7 +338,12 @@ const styles = StyleSheet.create({
   sectionHeading: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 12,
     justifyContent: "space-between",
+  },
+  sectionHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   sectionLabel: {
     color: colors.textMuted,

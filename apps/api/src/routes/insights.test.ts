@@ -63,6 +63,33 @@ function meetingRequest(): InsightRequest {
 }
 
 describe("POST /v1/insights", () => {
+  it("accepts a description-only thread when no contact or meeting write was needed", async () => {
+    const fixture = getAnalyzeFixture("no-action");
+    const response = await createServer().inject({
+      method: "POST",
+      url: "/v1/insights",
+      payload: {
+        sourceRunId,
+        note: "Remember that I prefer concise follow-ups.",
+        thread: fixture.thread,
+        confirmedActions: [],
+        toolResults: [],
+        entityMemories: [],
+        contacts: [],
+        meetings: [],
+        timezone: "Asia/Shanghai",
+        currentTime: "2026-08-26T03:30:00.000Z",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      sourceRunId,
+      insights: [],
+      globalMemoryOperations: [],
+    });
+  });
+
   it("returns evidence- and memory-backed help after execution", async () => {
     const response = await createServer().inject({
       method: "POST",
