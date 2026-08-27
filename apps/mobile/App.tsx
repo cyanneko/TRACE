@@ -481,8 +481,6 @@ export default function App() {
     currentAnalysis: AnalyzeResult,
     contactCards: ActionCard[],
     confirmedActions: ActionCard[],
-    results: ToolResult[],
-    finishIfEmpty: boolean,
     feedback = reviewFeedback.meetings,
   ): Promise<boolean> {
     setPlanningMeetings(true);
@@ -509,9 +507,6 @@ export default function App() {
         ]);
       });
       setReviewStage("meetings");
-      if (meetingCards.length === 0 && finishIfEmpty) {
-        await finishExecution(combined, confirmedActions, results, meetingPass.contacts);
-      }
       return true;
     } catch (planningError) {
       updateApiHealth(planningError);
@@ -555,12 +550,11 @@ export default function App() {
       !cards.some(isMeetingAction)
     ) {
       try {
-        await planMeetingStage(
+        await finishExecution(
           analysis,
-          cards.filter(isContactAction),
           stagedActionsRef.current,
           stagedResultsRef.current,
-          true,
+          analysisContacts,
         );
       } finally {
         setExecutingStage(false);
@@ -613,13 +607,7 @@ export default function App() {
       if (reviewStage === "contacts") {
         setReviewStage("meetings");
         const hasContactFailure = stageResults.some((result) => !result.success);
-        const planned = await planMeetingStage(
-          analysis,
-          cards.filter(isContactAction),
-          confirmedActions,
-          results,
-          confirmedActions.length > 0,
-        );
+        const planned = await planMeetingStage(analysis, cards.filter(isContactAction), confirmedActions);
         if (planned && hasContactFailure) {
           setError("Some contact actions failed. Dependent meetings will keep those people unlinked.");
         }
@@ -670,8 +658,6 @@ export default function App() {
           analysis,
           cards.filter(isContactAction),
           stagedActionsRef.current,
-          stagedResultsRef.current,
-          stagedActionsRef.current.length > 0,
           reviewFeedback.meetings,
         );
       }
@@ -1314,15 +1300,15 @@ function ReviewScreen({
   const stageCards = cards.filter(stage === "contacts" ? isContactAction : isMeetingAction);
   const selectedStageCount = stageCards.filter((card) => selectedIds.has(card.id)).length;
   const hasContactStage = cards.some(isContactAction);
-  const meetingPlanningRetry =
+  const emptyMeetingStage =
     stage === "meetings" && stageCards.length === 0 && confirmedActionCount > 0;
   const stagedFlow = stage === "contacts" || hasContactStage || confirmedActionCount > 0;
   const reviewBusy = confirming || retrying;
   const canConfirm =
     stage === "contacts" || selectedStageCount > 0 || confirmedActionCount > 0;
   const confirmLabel =
-    meetingPlanningRetry
-      ? "Retry meeting analysis"
+    emptyMeetingStage
+      ? "Finish with contacts"
       : stage === "contacts"
         ? selectedStageCount > 0
           ? "Confirm contacts and analyze meetings"
@@ -1402,9 +1388,11 @@ function ReviewScreen({
               {stagedFlow ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
             </Text>
             <Text style={styles.actionStageTitle}>{stage === "contacts" ? "Contacts" : "Meetings"}</Text>
-            <Text style={styles.actionsCount}>
-              {selectedStageCount} of {stageCards.length} selected
-            </Text>
+            {stageCards.length > 0 ? (
+              <Text style={styles.actionsCount}>
+                {selectedStageCount} of {stageCards.length} selected
+              </Text>
+            ) : null}
             {stage === "contacts" ? (
               <Text style={styles.stageHint}>Confirmed contacts become context for a new meeting analysis.</Text>
             ) : null}
@@ -1443,11 +1431,15 @@ function ReviewScreen({
             <Text style={styles.noActionTitle}>No contact action found</Text>
             <Text style={styles.noActionCopy}>Revise this pass or continue to meeting analysis.</Text>
           </View>
-        ) : meetingPlanningRetry ? (
+        ) : emptyMeetingStage ? (
           <View style={styles.noActionState}>
             <RotateCcw color={colors.blue} size={28} strokeWidth={1.8} />
-            <Text style={styles.noActionTitle}>Meeting analysis needs another try</Text>
-            <Text style={styles.noActionCopy}>Confirmed contacts remain saved.</Text>
+            <Text style={styles.noActionTitle}>
+              {error ? "Meeting analysis needs another try" : "No meeting action found"}
+            </Text>
+            <Text style={styles.noActionCopy}>
+              Confirmed contacts remain saved. Revise this pass or finish with those contacts.
+            </Text>
           </View>
         ) : (
           <View style={styles.noActionState}>
@@ -1502,8 +1494,8 @@ function ReviewScreen({
             <View style={styles.confirmationCopy}>
               <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
               <Text style={styles.confirmationDetail}>
-                {meetingPlanningRetry
-                  ? "Confirmed contacts remain saved while TRACE retries only the meeting pass."
+                {emptyMeetingStage
+                  ? "No meeting write is selected. Revise the meeting pass above, or finish with the confirmed contacts."
                   : stage === "contacts" && selectedStageCount === 0
                     ? "No contact writes are selected. TRACE will continue with the meeting pass."
                   : `${selectedStageCount} selected ${stage === "contacts" ? "contact" : "meeting"} action(s) will be written by the ${executionMode === "demo" ? "Demo" : "iOS"} executor. Unselected cards stay untouched.`}
@@ -1700,7 +1692,7 @@ const styles = StyleSheet.create({
   chooseScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 100,
+    minHeight: 130,
     paddingHorizontal: 20,
   },
   composerDivider: {
@@ -1727,7 +1719,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   descriptionInputIdle: {
-    minHeight: 120,
+    minHeight: 90,
     textAlign: "center",
     textAlignVertical: "center",
   },

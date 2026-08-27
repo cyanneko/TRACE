@@ -565,6 +565,33 @@ npx expo export --platform ios
 
 Commit: `feat(capture): compact composer and provider selection`
 
+## Iteration 23 - Smaller Composer and Empty Meeting Recovery
+
+Status: completed
+
+- [x] Preserve Iteration 22 as `iteration-22-compact-composer-provider-dropdown` before editing.
+- [x] Reduce the empty `Describe something` area from roughly one half to roughly one third of the composer.
+- [x] Give the screenshot chooser the reclaimed space without changing the outer composer height.
+- [x] Keep the full-height typing state and clear-to-reset behavior unchanged.
+- [x] Stop treating a valid but empty meeting-model response as automatic workflow completion.
+- [x] Keep confirmed contacts while showing an explicit empty meeting review state.
+- [x] Let the user revise only the meeting pass or explicitly finish with confirmed contacts.
+- [x] Require grounded but incomplete meeting intent to produce an editable meeting card.
+- [x] Cover empty meeting recovery and the explicit finish choice in Playwright.
+- [x] Verify the smaller empty and reset states at iPhone width.
+- [x] Run regression checks and publish the iteration.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `fix(workflow): recover empty meeting plans`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

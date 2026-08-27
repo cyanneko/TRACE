@@ -73,6 +73,8 @@ describe("buildAnalyzePrompt", () => {
     expect(contactPrompt).toContain("Every directly interacting unmatched participant, including the user");
     expect(meetingPrompt).toContain("MEETING PASS 2");
     expect(meetingPrompt).toContain("supplied contacts are the confirmed result of pass 1");
+    expect(meetingPrompt).toContain("even when its time or other fields are incomplete");
+    expect(meetingPrompt).toContain("genuinely no grounded meeting or meeting change");
   });
 
   it("keeps stage feedback as guidance rather than conversation evidence", () => {

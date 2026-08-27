@@ -27,11 +27,20 @@ export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvid
       const { visionProvider, ...analyzeInput } = parsedInput.data;
       const requestProvider = visionProvider ? createUserModelProvider(visionProvider, environment) : provider;
       const output = applyAnalysisScope(analyzeInput, await requestProvider.analyze(analyzeInput));
-      return AnalyzeResultSchema.parse({
+      const result = AnalyzeResultSchema.parse({
         ...output,
         provider: requestProvider.info,
         runId: randomUUID(),
       });
+      request.log.info(
+        {
+          actionCount: result.actionCards.length,
+          actionScope: analyzeInput.actionScope,
+          actionTypes: result.actionCards.map((card) => card.type),
+        },
+        "analysis completed",
+      );
+      return result;
     } catch (error) {
       if (error instanceof ModelOutputError) {
         request.log.error(

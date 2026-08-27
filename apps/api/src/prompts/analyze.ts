@@ -9,7 +9,7 @@ export function buildAnalyzePrompt(input: AnalyzeRequest): string {
     contacts:
       "This is CONTACT PASS 1. actionCards may contain only create_contact and update_contact. Extract the complete thread, including all meeting evidence, but do not return meeting actions yet. Every directly interacting unmatched participant, including the user, needs a contact action.",
     meetings:
-      "This is MEETING PASS 2. actionCards may contain only create_meeting and update_meeting. The supplied contacts are the confirmed result of pass 1. Use their IDs for attendees and do not return contact actions.",
+      "This is MEETING PASS 2. actionCards may contain only create_meeting and update_meeting. The supplied contacts are the confirmed result of pass 1. Use their IDs for attendees and do not return contact actions. If the screenshot, description, or priorThread grounds an agreement, invitation, interview, appointment, or intention to meet, return the corresponding meeting action even when its time or other fields are incomplete; keep unresolved fields null and add risk flags. Return no meeting action only when there is genuinely no grounded meeting or meeting change.",
   }[input.actionScope];
   const context = {
     actionScope: input.actionScope,

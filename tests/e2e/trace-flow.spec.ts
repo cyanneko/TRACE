@@ -91,6 +91,8 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
+  await expect(page.getByText("No meeting action found", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Finish with contacts" }).click();
 
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
   const secondRun = await page.evaluate(() => {
@@ -169,7 +171,7 @@ test("description-only analysis confirms contacts before meetings and links part
   expect(initialBox).not.toBeNull();
   expect(Math.abs(initialTitleBox!.x + initialTitleBox!.width / 2 - (initialFrameBox!.x + initialFrameBox!.width / 2))).toBeLessThan(2);
   expect(initialFrameBox!.y - (initialTitleBox!.y + initialTitleBox!.height)).toBeLessThanOrEqual(12);
-  expect(initialBox!.height).toBeLessThan(initialFrameBox!.height * 0.6);
+  expect(initialBox!.height).toBeLessThan(initialFrameBox!.height * 0.45);
 
   await composer.fill("林乔介绍了自己，并约我明天下午三点聊半小时合作方案。");
   await page.waitForTimeout(320);
@@ -187,7 +189,7 @@ test("description-only analysis confirms contacts before meetings and links part
   const resetFrameBox = await frame.boundingBox();
   expect(resetBox).not.toBeNull();
   expect(resetFrameBox).not.toBeNull();
-  expect(resetBox!.height).toBeLessThan(resetFrameBox!.height * 0.6);
+  expect(resetBox!.height).toBeLessThan(resetFrameBox!.height * 0.45);
   expect(resetFrameBox!.y).toBeGreaterThan(activeFrameBox!.y);
   await expect(page.getByLabel("Choose a chat screenshot")).toBeVisible();
 
@@ -407,6 +409,47 @@ test("a failed meeting pass keeps confirmed contacts and can be revised", async 
     ).length;
   });
   expect(contactsAfterRetry).toBe(2);
+});
+
+test("an empty meeting response waits for an explicit user decision", async ({ page }) => {
+  await page.route("**/v1/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { actionScope?: string };
+    const response = await route.fetch();
+    if (body.actionScope !== "meetings") {
+      await route.fulfill({ response });
+      return;
+    }
+
+    const result = (await response.json()) as { actionCards: unknown[] };
+    await route.fulfill({ response, json: { ...result, actionCards: [] } });
+  });
+  await page.goto("/?__trace_fixture=self-meeting");
+  await page
+    .getByLabel("Describe something")
+    .fill("我叫 Kai。Lina HR 约我明天下午两点面试。");
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
+
+  await expect(page.getByText("STEP 2 OF 2", { exact: true })).toBeVisible();
+  await expect(page.getByText("No meeting action found", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Feedback for meetings analysis")).toBeVisible();
+  await expect(page.getByText("Execution results", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Finish with contacts" }).click();
+  await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
+
+  const entities = await page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<{ displayName: string }>;
+      meetings?: Array<{ title: string }>;
+    };
+    return {
+      contacts: stored.contacts?.filter((contact) =>
+        contact.displayName === "Kai" || contact.displayName === "Lina HR"
+      ).length,
+      meetings: stored.meetings?.filter((meeting) => meeting.title === "与 Lina HR 的面试").length ?? 0,
+    };
+  });
+  expect(entities).toEqual({ contacts: 2, meetings: 0 });
 });
 
 test("a successful analysis clears a stale offline health indicator", async ({ page }) => {
