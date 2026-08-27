@@ -1,4 +1,13 @@
-import type { ActionCard, ContactRecord, Evidence, MeetingRecord } from "@trace/contracts";
+import type {
+  ActionCard,
+  ContactChange,
+  ContactRecord,
+  Evidence,
+  MeetingChange,
+  MeetingRecord,
+  UpdateContactCard,
+  UpdateMeetingCard,
+} from "@trace/contracts";
 import {
   CalendarClock,
   CalendarPlus,
@@ -220,126 +229,339 @@ function Fields({ card, contacts, meetings, onChange }: Pick<Props, "card" | "co
   }
 
   if (card.type === "update_meeting") {
-    const timezoneChange = card.payload.changes.find((change) => change.field === "timezone");
-    const timezone =
-      (timezoneChange?.field === "timezone" ? timezoneChange.nextValue : null) ||
-      Intl.DateTimeFormat().resolvedOptions().timeZone ||
-      "UTC";
-    const participantChangeIndex = card.payload.changes.findIndex(
-      (change) => change.field === "participantContactIds",
-    );
-    const participantChange = card.payload.changes[participantChangeIndex];
-    const existingMeeting = meetings.find(
-      (meeting) =>
-        meeting.id === card.payload.meetingId ||
-        meeting.externalEventId === card.payload.meetingId,
-    );
-    const previousParticipantIds =
-      participantChange?.field === "participantContactIds"
-        ? participantChange.previousValue
-        : existingMeeting?.participantContactIds ?? [];
-    const proposedParticipantIds =
-      participantChange?.field === "participantContactIds"
-        ? participantChange.nextValue
-        : previousParticipantIds;
-    const showParticipantEditor =
-      participantChange?.field === "participantContactIds" || card.payload.participantNames.length > 0;
-    return (
-      <View style={styles.fields}>
-        <Field label="Meeting" onChangeText={() => undefined} readOnly value={card.payload.displayTitle} />
-        {showParticipantEditor ? (
-          <MeetingParticipantsField
-            contactIds={proposedParticipantIds}
-            contacts={contacts}
-            onChange={(participantContactIds, participantNames) => {
-              const changes =
-                participantChangeIndex >= 0
-                  ? card.payload.changes.map((change, index) =>
-                      index === participantChangeIndex && change.field === "participantContactIds"
-                        ? { ...change, nextValue: participantContactIds }
-                        : change,
-                    )
-                  : [
-                      ...card.payload.changes,
-                      {
-                        field: "participantContactIds" as const,
-                        previousValue: previousParticipantIds,
-                        nextValue: participantContactIds,
-                      },
-                    ];
-              onChange({ ...card, payload: { ...card.payload, changes, participantNames } });
-            }}
-            participantNames={card.payload.participantNames}
-          />
-        ) : null}
-        {card.payload.changes.map((change, index) => (
-          change.field === "participantContactIds" ? null : <View key={`${change.field}-${index}`} style={styles.changeRow}>
-            <View style={styles.changeLabel}>
-              <Text style={styles.changeField}>{change.field}</Text>
-              <Text numberOfLines={1} style={styles.previousValue}>
-                {formatMeetingChangeValue(change.field, change.previousValue) || "No existing value"}
-              </Text>
-            </View>
-            {change.field === "startAt" || change.field === "endAt" ? (
-              <DateTimeField
-                label="New date and time"
-                onChange={(nextValue) => {
-                  const changes = card.payload.changes.map((item, itemIndex) =>
-                    itemIndex === index && (item.field === "startAt" || item.field === "endAt")
-                      ? { ...item, nextValue: nextValue ?? null }
-                      : item,
-                  );
-                  onChange({ ...card, payload: { ...card.payload, changes } });
-                }}
-                timezone={timezone}
-                value={change.nextValue ?? undefined}
-              />
-            ) : (
-              <Field
-                label="New value"
-                onChangeText={(nextValue) => {
-                  const changes = card.payload.changes.map((item, itemIndex) => {
-                    if (itemIndex !== index) return item;
-                    if (item.field === "participantContactIds") return item;
-                    if (item.field === "title" || item.field === "timezone") {
-                      return { ...item, nextValue };
-                    }
-                    return { ...item, nextValue: nextValue || null };
-                  });
-                  onChange({ ...card, payload: { ...card.payload, changes } });
-                }}
-                value={formatMeetingChangeValue(change.field, change.nextValue)}
-              />
-            )}
-          </View>
-        ))}
-      </View>
-    );
+    return <UpdateMeetingFields card={card} contacts={contacts} meetings={meetings} onChange={onChange} />;
   }
+
+  return <UpdateContactFields card={card} contacts={contacts} onChange={onChange} />;
+}
+
+type ContactTextField = "displayName" | "givenName" | "familyName" | "company" | "jobTitle" | "notes";
+type MeetingTextField = "title" | "timezone" | "location" | "meetingLink" | "notes";
+
+function sameValues(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function splitValues(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(/[\n,，;；]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function withContactChange(
+  card: UpdateContactCard,
+  change: ContactChange,
+  unchanged: boolean,
+): UpdateContactCard {
+  const changes = card.payload.changes.filter((item) => item.field !== change.field);
+  if (!unchanged) changes.push(change);
+  return { ...card, payload: { ...card.payload, changes } };
+}
+
+function withMeetingChange(
+  card: UpdateMeetingCard,
+  change: MeetingChange,
+  unchanged: boolean,
+): UpdateMeetingCard {
+  const changes = card.payload.changes.filter((item) => item.field !== change.field);
+  if (!unchanged) changes.push(change);
+  return { ...card, payload: { ...card.payload, changes } };
+}
+
+function UpdateContactFields({
+  card,
+  contacts,
+  onChange,
+}: {
+  card: UpdateContactCard;
+  contacts: ContactRecord[];
+  onChange: Props["onChange"];
+}) {
+  const existing = contacts.find(
+    (contact) => contact.id === card.payload.contactId || contact.externalContactId === card.payload.contactId,
+  );
+  const findChange = (field: ContactChange["field"]) =>
+    card.payload.changes.find((change) => change.field === field);
+
+  const displayNameChange = findChange("displayName");
+  const givenNameChange = findChange("givenName");
+  const familyNameChange = findChange("familyName");
+  const companyChange = findChange("company");
+  const jobTitleChange = findChange("jobTitle");
+  const phonesChange = findChange("phones");
+  const emailsChange = findChange("emails");
+  const notesChange = findChange("notes");
+  const isSelfChange = findChange("isSelf");
+
+  const previousDisplayName = existing?.displayName ??
+    (displayNameChange?.field === "displayName" ? displayNameChange.previousValue : null) ??
+    card.payload.displayName;
+  const previousGivenName = existing?.givenName ??
+    (givenNameChange?.field === "givenName" ? givenNameChange.previousValue : null) ?? "";
+  const previousFamilyName = existing?.familyName ??
+    (familyNameChange?.field === "familyName" ? familyNameChange.previousValue : null) ?? "";
+  const previousCompany = existing?.company ??
+    (companyChange?.field === "company" ? companyChange.previousValue : null) ?? "";
+  const previousJobTitle = existing?.jobTitle ??
+    (jobTitleChange?.field === "jobTitle" ? jobTitleChange.previousValue : null) ?? "";
+  const previousPhones = existing?.phones ??
+    (phonesChange?.field === "phones" ? phonesChange.previousValue : []);
+  const previousEmails = existing?.emails ??
+    (emailsChange?.field === "emails" ? emailsChange.previousValue : []);
+  const previousNotes = existing?.notes ??
+    (notesChange?.field === "notes" ? notesChange.previousValue : null) ?? "";
+  const previousIsSelf = existing?.isSelf ??
+    (isSelfChange?.field === "isSelf" ? isSelfChange.previousValue : false);
+
+  const displayName = displayNameChange?.field === "displayName"
+    ? displayNameChange.nextValue ?? ""
+    : previousDisplayName;
+  const givenName = givenNameChange?.field === "givenName" ? givenNameChange.nextValue ?? "" : previousGivenName;
+  const familyName = familyNameChange?.field === "familyName"
+    ? familyNameChange.nextValue ?? ""
+    : previousFamilyName;
+  const company = companyChange?.field === "company" ? companyChange.nextValue ?? "" : previousCompany;
+  const jobTitle = jobTitleChange?.field === "jobTitle" ? jobTitleChange.nextValue ?? "" : previousJobTitle;
+  const phones = phonesChange?.field === "phones" ? phonesChange.nextValue : previousPhones;
+  const emails = emailsChange?.field === "emails" ? emailsChange.nextValue : previousEmails;
+  const notes = notesChange?.field === "notes" ? notesChange.nextValue ?? "" : previousNotes;
+  const isSelf = isSelfChange?.field === "isSelf" ? isSelfChange.nextValue : previousIsSelf;
+
+  const updateText = (field: ContactTextField, previousValue: string, nextValue: string) => {
+    const change: ContactChange = {
+      field,
+      previousValue: previousValue || null,
+      nextValue: field === "displayName" ? nextValue : nextValue || null,
+    };
+    onChange(withContactChange(card, change, nextValue === previousValue));
+  };
 
   return (
     <View style={styles.fields}>
-      <Field label="Contact" onChangeText={() => undefined} readOnly value={card.payload.displayName} />
-      {card.payload.changes.map((change, index) => (
-        <View key={`${change.field}-${index}`} style={styles.changeRow}>
-          <View style={styles.changeLabel}>
-            <Text style={styles.changeField}>{change.field}</Text>
-            <Text numberOfLines={1} style={styles.previousValue}>
-              {change.previousValue || "No existing value"}
-            </Text>
-          </View>
-          <Field
-            label="New value"
-            onChangeText={(nextValue) => {
-              const changes = card.payload.changes.map((item, itemIndex) =>
-                itemIndex === index ? { ...item, nextValue } : item,
-              );
-              onChange({ ...card, payload: { ...card.payload, changes } });
-            }}
-            value={change.nextValue}
-          />
+      <View style={styles.editorStatus}>
+        <Text numberOfLines={1} style={styles.editorTarget}>Editing {card.payload.displayName}</Text>
+        <Text style={styles.editorChangeCount}>{card.payload.changes.length} changed</Text>
+      </View>
+      <Field label="Name" onChangeText={(value) => updateText("displayName", previousDisplayName, value)} value={displayName} />
+      <View style={styles.fieldRow}>
+        <Field label="Given name" onChangeText={(value) => updateText("givenName", previousGivenName, value)} value={givenName} />
+        <Field label="Family name" onChangeText={(value) => updateText("familyName", previousFamilyName, value)} value={familyName} />
+      </View>
+      <View style={styles.fieldRow}>
+        <Field label="Company" onChangeText={(value) => updateText("company", previousCompany, value)} value={company} />
+        <Field label="Role" onChangeText={(value) => updateText("jobTitle", previousJobTitle, value)} value={jobTitle} />
+      </View>
+      <View style={styles.fieldRow}>
+        <Field
+          label="Phone numbers"
+          multiline
+          onChangeText={(value) => {
+            const nextValue = splitValues(value);
+            onChange(withContactChange(card, {
+              field: "phones",
+              previousValue: previousPhones,
+              nextValue,
+            }, sameValues(previousPhones, nextValue)));
+          }}
+          value={phones.join("\n")}
+        />
+        <Field
+          label="Email addresses"
+          multiline
+          onChangeText={(value) => {
+            const nextValue = splitValues(value);
+            onChange(withContactChange(card, {
+              field: "emails",
+              previousValue: previousEmails,
+              nextValue,
+            }, sameValues(previousEmails, nextValue)));
+          }}
+          value={emails.join("\n")}
+        />
+      </View>
+      <Field label="Notes" multiline onChangeText={(value) => updateText("notes", previousNotes, value)} value={notes} />
+      <View style={styles.toggleRow}>
+        <View>
+          <Text style={styles.toggleTitle}>This is me</Text>
+          <Text style={styles.toggleMeta}>Self contact</Text>
         </View>
-      ))}
+        <Switch
+          accessibilityLabel={`This contact is me: ${card.payload.displayName}`}
+          onValueChange={(nextValue) =>
+            onChange(withContactChange(card, {
+              field: "isSelf",
+              previousValue: previousIsSelf,
+              nextValue,
+            }, nextValue === previousIsSelf))
+          }
+          thumbColor="#FFFFFF"
+          trackColor={{ false: colors.border, true: colors.primary }}
+          value={isSelf}
+        />
+      </View>
+    </View>
+  );
+}
+
+function UpdateMeetingFields({
+  card,
+  contacts,
+  meetings,
+  onChange,
+}: {
+  card: UpdateMeetingCard;
+  contacts: ContactRecord[];
+  meetings: MeetingRecord[];
+  onChange: Props["onChange"];
+}) {
+  const existing = meetings.find(
+    (meeting) => meeting.id === card.payload.meetingId || meeting.externalEventId === card.payload.meetingId,
+  );
+  const findChange = (field: MeetingChange["field"]) =>
+    card.payload.changes.find((change) => change.field === field);
+
+  const titleChange = findChange("title");
+  const startChange = findChange("startAt");
+  const endChange = findChange("endAt");
+  const timezoneChange = findChange("timezone");
+  const allDayChange = findChange("allDay");
+  const locationChange = findChange("location");
+  const meetingLinkChange = findChange("meetingLink");
+  const notesChange = findChange("notes");
+  const participantsChange = findChange("participantContactIds");
+
+  const previousTitle = existing?.title ??
+    (titleChange?.field === "title" ? titleChange.previousValue : null) ?? card.payload.displayTitle;
+  const previousStartAt = existing?.startAt ??
+    (startChange?.field === "startAt" ? startChange.previousValue : null);
+  const previousEndAt = existing?.endAt ??
+    (endChange?.field === "endAt" ? endChange.previousValue : null);
+  const previousTimezone = (
+    existing?.timezone ??
+    (timezoneChange?.field === "timezone" ? timezoneChange.previousValue : null) ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  ) || "UTC";
+  const previousAllDay = existing?.allDay ??
+    (allDayChange?.field === "allDay" ? allDayChange.previousValue : false);
+  const previousLocation = existing?.location ??
+    (locationChange?.field === "location" ? locationChange.previousValue : null) ?? "";
+  const previousMeetingLink = existing?.meetingLink ??
+    (meetingLinkChange?.field === "meetingLink" ? meetingLinkChange.previousValue : null) ?? "";
+  const previousNotes = existing?.notes ??
+    (notesChange?.field === "notes" ? notesChange.previousValue : null) ?? "";
+  const previousParticipantIds = existing?.participantContactIds ??
+    (participantsChange?.field === "participantContactIds" ? participantsChange.previousValue : []);
+
+  const title = titleChange?.field === "title" ? titleChange.nextValue ?? "" : previousTitle;
+  const startAt = startChange?.field === "startAt" ? startChange.nextValue : previousStartAt;
+  const endAt = endChange?.field === "endAt" ? endChange.nextValue : previousEndAt;
+  const timezone = timezoneChange?.field === "timezone" ? timezoneChange.nextValue ?? "" : previousTimezone;
+  const allDay = allDayChange?.field === "allDay" ? allDayChange.nextValue : previousAllDay;
+  const location = locationChange?.field === "location" ? locationChange.nextValue ?? "" : previousLocation;
+  const meetingLink = meetingLinkChange?.field === "meetingLink"
+    ? meetingLinkChange.nextValue ?? ""
+    : previousMeetingLink;
+  const notes = notesChange?.field === "notes" ? notesChange.nextValue ?? "" : previousNotes;
+  const participantContactIds = participantsChange?.field === "participantContactIds"
+    ? participantsChange.nextValue
+    : previousParticipantIds;
+
+  const updateText = (field: MeetingTextField, previousValue: string, nextValue: string) => {
+    const change: MeetingChange = {
+      field,
+      previousValue: previousValue || null,
+      nextValue: field === "title" || field === "timezone" ? nextValue : nextValue || null,
+    };
+    onChange(withMeetingChange(card, change, nextValue === previousValue));
+  };
+  const updateTime = (field: "startAt" | "endAt", previousValue: string | null, nextValue?: string) =>
+    withMeetingChange(card, {
+      field,
+      previousValue,
+      nextValue: nextValue ?? null,
+    }, (nextValue ?? null) === previousValue);
+
+  const updateStartAt = (nextStartAt?: string) => {
+    let nextCard = updateTime("startAt", previousStartAt ?? null, nextStartAt);
+    if (nextStartAt && startAt && endAt) {
+      const currentStart = new Date(startAt);
+      const currentEnd = new Date(endAt);
+      const duration = currentEnd.getTime() - currentStart.getTime();
+      if (Number.isFinite(duration) && duration >= 0) {
+        const nextEndAt = new Date(new Date(nextStartAt).getTime() + duration).toISOString();
+        nextCard = withMeetingChange(nextCard, {
+          field: "endAt",
+          previousValue: previousEndAt ?? null,
+          nextValue: nextEndAt,
+        }, nextEndAt === (previousEndAt ?? null));
+      }
+    }
+    onChange(nextCard);
+  };
+
+  return (
+    <View style={styles.fields}>
+      <View style={styles.editorStatus}>
+        <Text numberOfLines={1} style={styles.editorTarget}>Editing {card.payload.displayTitle}</Text>
+        <Text style={styles.editorChangeCount}>{card.payload.changes.length} changed</Text>
+      </View>
+      <Field label="Title" onChangeText={(value) => updateText("title", previousTitle, value)} value={title} />
+      <View style={styles.fieldRow}>
+        <DateTimeField label="Starts" onChange={updateStartAt} timezone={timezone || previousTimezone} value={startAt ?? undefined} />
+        <DateTimeField
+          label="Ends"
+          onChange={(value) => onChange(updateTime("endAt", previousEndAt ?? null, value))}
+          timezone={timezone || previousTimezone}
+          value={endAt ?? undefined}
+        />
+      </View>
+      <View style={styles.toggleRow}>
+        <View>
+          <Text style={styles.toggleTitle}>All day</Text>
+          <Text style={styles.toggleMeta}>Calendar event</Text>
+        </View>
+        <Switch
+          accessibilityLabel={`All-day meeting: ${card.payload.displayTitle}`}
+          onValueChange={(nextValue) =>
+            onChange(withMeetingChange(card, {
+              field: "allDay",
+              previousValue: previousAllDay,
+              nextValue,
+            }, nextValue === previousAllDay))
+          }
+          thumbColor="#FFFFFF"
+          trackColor={{ false: colors.border, true: colors.primary }}
+          value={allDay}
+        />
+      </View>
+      <View style={styles.fieldRow}>
+        <Field label="Timezone" onChangeText={(value) => updateText("timezone", previousTimezone, value)} value={timezone} />
+        <Field label="Location" onChangeText={(value) => updateText("location", previousLocation, value)} value={location} />
+      </View>
+      <Field
+        label="Meeting link"
+        onChangeText={(value) => updateText("meetingLink", previousMeetingLink, value)}
+        value={meetingLink}
+      />
+      <MeetingParticipantsField
+        contactIds={participantContactIds}
+        contacts={contacts}
+        onChange={(nextContactIds, participantNames) => {
+          const nextCard = withMeetingChange(card, {
+            field: "participantContactIds",
+            previousValue: previousParticipantIds,
+            nextValue: nextContactIds,
+          }, sameValues(previousParticipantIds, nextContactIds));
+          onChange({ ...nextCard, payload: { ...nextCard.payload, participantNames } });
+        }}
+        participantNames={card.payload.participantNames}
+      />
+      <Field label="Notes" multiline onChangeText={(value) => updateText("notes", previousNotes, value)} value={notes} />
     </View>
   );
 }
@@ -529,23 +751,6 @@ function MeetingParticipantsField({
   );
 }
 
-function formatMeetingChangeValue(field: string, value: string | string[] | null): string {
-  if (Array.isArray(value)) return value.join(", ");
-  if ((field === "startAt" || field === "endAt") && value) {
-    const date = new Date(value);
-    if (Number.isFinite(date.getTime())) {
-      return date.toLocaleString(undefined, {
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    }
-  }
-  return value ?? "";
-}
-
 type FieldProps = {
   label: string;
   multiline?: boolean;
@@ -643,6 +848,24 @@ const styles = StyleSheet.create({
   },
   fields: {
     gap: 12,
+  },
+  editorStatus: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  editorTarget: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    minWidth: 0,
+  },
+  editorChangeCount: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: "700",
   },
   fieldRow: {
     flexDirection: "row",
@@ -784,26 +1007,6 @@ const styles = StyleSheet.create({
   },
   inputReadOnly: {
     backgroundColor: colors.surfaceMuted,
-  },
-  changeRow: {
-    alignItems: "flex-end",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  changeLabel: {
-    minWidth: 150,
-    paddingBottom: 8,
-  },
-  changeField: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  previousValue: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 3,
   },
   risks: {
     flexDirection: "row",

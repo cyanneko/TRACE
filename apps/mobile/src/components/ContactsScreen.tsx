@@ -258,6 +258,18 @@ function ContactDetail({
           />
           <View style={styles.fieldRow}>
             <DetailField
+              label="Given name"
+              onChangeText={(givenName) => setDraft((current) => ({ ...current, givenName }))}
+              value={draft.givenName ?? ""}
+            />
+            <DetailField
+              label="Family name"
+              onChangeText={(familyName) => setDraft((current) => ({ ...current, familyName }))}
+              value={draft.familyName ?? ""}
+            />
+          </View>
+          <View style={styles.fieldRow}>
+            <DetailField
               label="Company"
               onChangeText={(company) => setDraft((current) => ({ ...current, company }))}
               value={draft.company ?? ""}
@@ -270,16 +282,24 @@ function ContactDetail({
           </View>
           <View style={styles.fieldRow}>
             <DetailField
-              label="Phone"
-              onChangeText={(phone) => setDraft((current) => ({ ...current, phones: phone ? [phone] : [] }))}
-              value={draft.phones[0] ?? ""}
+              label="Phone numbers"
+              multiline
+              onChangeText={(value) => setDraft((current) => ({ ...current, phones: splitValues(value) }))}
+              value={draft.phones.join("\n")}
             />
             <DetailField
-              label="Email"
-              onChangeText={(email) => setDraft((current) => ({ ...current, emails: email ? [email] : [] }))}
-              value={draft.emails[0] ?? ""}
+              label="Email addresses"
+              multiline
+              onChangeText={(value) => setDraft((current) => ({ ...current, emails: splitValues(value) }))}
+              value={draft.emails.join("\n")}
             />
           </View>
+          <DetailField
+            label="Notes"
+            multiline
+            onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
+            value={draft.notes ?? ""}
+          />
           <View style={styles.toggleRow}>
             <View>
               <Text style={styles.toggleTitle}>This is me</Text>
@@ -316,19 +336,25 @@ function ContactDetail({
 
 type DetailFieldProps = {
   label: string;
+  multiline?: boolean;
   onChangeText: (value: string) => void;
   value: string;
 };
 
-function DetailField({ label, onChangeText, value }: DetailFieldProps) {
+function splitValues(value: string): string[] {
+  return [...new Set(value.split(/[\n,，;；]/).map((item) => item.trim()).filter(Boolean))];
+}
+
+function DetailField({ label, multiline, onChangeText, value }: DetailFieldProps) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
+        multiline={multiline}
         onChangeText={onChangeText}
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.primary}
-        style={styles.input}
+        style={[styles.input, multiline && styles.inputMultiline]}
         value={value}
       />
     </View>
@@ -504,6 +530,10 @@ const styles = StyleSheet.create({
     minHeight: 45,
     paddingHorizontal: 11,
     paddingVertical: 10,
+  },
+  inputMultiline: {
+    minHeight: 76,
+    textAlignVertical: "top",
   },
   toggleRow: {
     alignItems: "center",

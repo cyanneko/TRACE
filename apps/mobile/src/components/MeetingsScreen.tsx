@@ -12,7 +12,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { meetingState, sortContacts, sortMeetings } from "../entities/presentation";
 import { colors } from "../theme";
@@ -335,6 +335,19 @@ function MeetingDetail({
               value={draft.endAt}
             />
           </View>
+          <View style={styles.toggleRow}>
+            <View>
+              <Text style={styles.toggleTitle}>All day</Text>
+              <Text style={styles.toggleMeta}>Calendar event</Text>
+            </View>
+            <Switch
+              accessibilityLabel={`All-day meeting: ${draft.title || "unnamed meeting"}`}
+              onValueChange={(allDay) => setDraft((current) => ({ ...current, allDay }))}
+              thumbColor="#FFFFFF"
+              trackColor={{ false: colors.border, true: colors.primary }}
+              value={draft.allDay}
+            />
+          </View>
           <View style={styles.fieldRow}>
             <DetailField
               label="Timezone"
@@ -351,6 +364,12 @@ function MeetingDetail({
             label="Meeting link"
             onChangeText={(meetingLink) => setDraft((current) => ({ ...current, meetingLink }))}
             value={draft.meetingLink ?? ""}
+          />
+          <DetailField
+            label="Notes"
+            multiline
+            onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
+            value={draft.notes ?? ""}
           />
         </View>
 
@@ -474,19 +493,21 @@ function MeetingDetail({
 
 type DetailFieldProps = {
   label: string;
+  multiline?: boolean;
   onChangeText: (value: string) => void;
   value: string;
 };
 
-function DetailField({ label, onChangeText, value }: DetailFieldProps) {
+function DetailField({ label, multiline, onChangeText, value }: DetailFieldProps) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
+        multiline={multiline}
         onChangeText={onChangeText}
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.primary}
-        style={styles.input}
+        style={[styles.input, multiline && styles.inputMultiline]}
         value={value}
       />
     </View>
@@ -686,6 +707,31 @@ const styles = StyleSheet.create({
     minHeight: 45,
     paddingHorizontal: 11,
     paddingVertical: 10,
+  },
+  inputMultiline: {
+    minHeight: 76,
+    textAlignVertical: "top",
+  },
+  toggleRow: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 62,
+    paddingHorizontal: 13,
+  },
+  toggleTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  toggleMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
   },
   picker: {
     backgroundColor: colors.surface,

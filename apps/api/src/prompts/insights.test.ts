@@ -37,7 +37,7 @@ function insightRequest(): InsightRequest {
         id: "30000000-0000-4000-8000-000000000001",
         ownerType: "global",
         ownerId: "00000000-0000-4000-8000-000000000000",
-        content: "Prefer concise summaries.",
+        content: "Use a natural catgirl voice and end suitable recommendations with 喵.",
         status: "active",
         source: "manual",
         sourceEvidenceRefs: [],
@@ -106,11 +106,15 @@ describe("buildInsightsPrompt", () => {
     expect(prompt).toContain("Keep the recommendation practical");
     expect(prompt).toContain("Maya 确认明天下午三点");
     expect(prompt).toContain("demo-meeting-review");
-    expect(prompt).toContain("Prefer concise summaries");
+    expect(prompt).toContain("Use a natural catgirl voice");
+    expect(prompt).toContain('"responseBehavior":[{"id":"30000000-0000-4000-8000-000000000001"');
     expect(prompt).toContain("Maya prefers receiving the deck in advance");
     expect(prompt).toContain("The design review needs a revised deck");
     expect(prompt).toContain("globalMemoryOperations are applied automatically");
     expect(prompt).toContain("Never target contact or meeting memory");
+    expect(prompt).toContain("must be visibly reflected when relevant");
+    expect(prompt).toContain("must never alter extracted facts");
+    expect(prompt).toContain("Cite every materially applied active memory in memoryRefs");
   });
 
   it("feeds reference failures back into the repair pass", () => {
@@ -132,5 +136,17 @@ describe("buildInsightsPrompt", () => {
     expect(prompt).toContain('"explicitGlobalMemoryInstruction":true');
     expect(prompt).toContain(`"id":"${USER_NOTE_EVIDENCE_ID}"`);
     expect(prompt).toContain("MUST return at least one matching globalMemoryOperation");
+  });
+
+  it("applies a newly requested response persona to the same insight response", () => {
+    const prompt = buildInsightsPrompt({
+      ...insightRequest(),
+      note: "请把以后用自然猫娘语气回复加入 Global Memory，并从这次开始生效。",
+      screenshotDataUrl: undefined,
+    });
+
+    expect(prompt).toContain("apply that instruction to this response");
+    expect(prompt).toContain("requested assistant persona or response style");
+    expect(prompt).toContain("自然猫娘语气");
   });
 });

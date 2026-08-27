@@ -40,14 +40,6 @@ function findMeeting(meetings: MeetingRecord[], id?: string | null): MeetingReco
   return meetings.find((meeting) => meeting.id === id || meeting.externalEventId === id);
 }
 
-function replaceOrAppend(values: string[], previousValue: string | null, nextValue: string): string[] {
-  const next = [...values];
-  const index = previousValue ? next.indexOf(previousValue) : -1;
-  if (index >= 0) next[index] = nextValue;
-  else if (!next.includes(nextValue)) next.push(nextValue);
-  return next;
-}
-
 function contactEffects(
   state: EntityState,
   input: CommitSuccessfulActionInput,
@@ -69,6 +61,7 @@ function contactEffects(
       jobTitle: action.payload.jobTitle || undefined,
       phones: action.payload.phones,
       emails: action.payload.emails,
+      notes: action.payload.notes || undefined,
       isSelf: action.payload.isSelf,
       status: "active",
       source,
@@ -85,7 +78,7 @@ function contactEffects(
     findContact(state.contacts, action.payload.contactId) ?? findContact(state.contacts, result.externalId);
   const contact: ContactRecord = {
     id: existing?.id ?? factory.createId(),
-    externalContactId: result.externalId ?? existing?.externalContactId ?? action.payload.contactId ?? undefined,
+    externalContactId: result.externalId ?? existing?.externalContactId,
     displayName: existing?.displayName || action.payload.displayName,
     sortName: existing?.sortName,
     givenName: existing?.givenName,
@@ -94,6 +87,7 @@ function contactEffects(
     jobTitle: existing?.jobTitle,
     phones: existing?.phones ?? [],
     emails: existing?.emails ?? [],
+    notes: existing?.notes,
     isSelf: existing?.isSelf ?? false,
     status: "active",
     source: existing?.source ?? source,
@@ -102,17 +96,24 @@ function contactEffects(
   };
 
   for (const change of action.payload.changes) {
-    if (change.field === "displayName") contact.displayName = change.nextValue;
-    if (change.field === "givenName") contact.givenName = change.nextValue;
-    if (change.field === "familyName") contact.familyName = change.nextValue;
-    if (change.field === "company") contact.company = change.nextValue;
-    if (change.field === "jobTitle") contact.jobTitle = change.nextValue;
-    if (change.field === "phone") {
-      contact.phones = replaceOrAppend(contact.phones, change.previousValue, change.nextValue);
+    if (change.field === "displayName") {
+      contact.displayName = change.nextValue!;
+      contact.sortName = undefined;
     }
-    if (change.field === "email") {
-      contact.emails = replaceOrAppend(contact.emails, change.previousValue, change.nextValue);
+    if (change.field === "givenName") {
+      contact.givenName = change.nextValue?.trim() || undefined;
+      contact.sortName = undefined;
     }
+    if (change.field === "familyName") {
+      contact.familyName = change.nextValue?.trim() || undefined;
+      contact.sortName = undefined;
+    }
+    if (change.field === "company") contact.company = change.nextValue?.trim() || undefined;
+    if (change.field === "jobTitle") contact.jobTitle = change.nextValue?.trim() || undefined;
+    if (change.field === "phones") contact.phones = [...change.nextValue];
+    if (change.field === "emails") contact.emails = [...change.nextValue];
+    if (change.field === "notes") contact.notes = change.nextValue || undefined;
+    if (change.field === "isSelf") contact.isSelf = change.nextValue;
   }
   return ContactRecordSchema.parse(contact);
 }
@@ -159,7 +160,7 @@ function meetingEffects(
     findMeeting(state.meetings, action.payload.meetingId) ?? findMeeting(state.meetings, result.externalId);
   const meeting: MeetingRecord = {
     id: existing?.id ?? factory.createId(),
-    externalEventId: result.externalId ?? existing?.externalEventId ?? action.payload.meetingId ?? undefined,
+    externalEventId: result.externalId ?? existing?.externalEventId,
     title: existing?.title || action.payload.displayTitle,
     startAt: existing?.startAt,
     endAt: existing?.endAt,
@@ -183,6 +184,7 @@ function meetingEffects(
     if (change.field === "location") meeting.location = change.nextValue ?? undefined;
     if (change.field === "meetingLink") meeting.meetingLink = change.nextValue ?? undefined;
     if (change.field === "notes") meeting.notes = change.nextValue ?? undefined;
+    if (change.field === "allDay") meeting.allDay = change.nextValue;
     if (change.field === "participantContactIds") {
       meeting.participantContactIds = [
         ...new Set(change.nextValue.map((id) => findContact(state.contacts, id)?.id ?? id)),
@@ -260,18 +262,6 @@ export function deriveActionEntityEffects(
         content,
         evidenceRefs: input.action.evidenceRefs,
       });
-    }
-  }
-
-  if (input.action.type === "update_contact" && input.action.evidenceRefs.length > 0) {
-    for (const change of input.action.payload.changes.filter((item) => item.field === "notes")) {
-      if (!proposals.some((proposal) => proposal.content.trim() === change.nextValue.trim())) {
-        proposals.push({
-          target: { type: "action_entity" },
-          content: change.nextValue,
-          evidenceRefs: input.action.evidenceRefs,
-        });
-      }
     }
   }
 

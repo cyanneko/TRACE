@@ -132,6 +132,36 @@ describe("ActionCardSchema", () => {
     }
   });
 
+  it("accepts a contact update across every user-facing field", () => {
+    const result = ActionCardSchema.safeParse({
+      id: "action-update-contact-complete",
+      type: "update_contact",
+      title: "Update my contact",
+      confidence: 0.97,
+      evidenceRefs: ["evidence-profile"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        contactId: "contact-kai",
+        displayName: "Kai",
+        changes: [
+          { field: "displayName", previousValue: "Kai", nextValue: "Kai Qiu" },
+          { field: "givenName", previousValue: "Kai", nextValue: "Kaixi" },
+          { field: "familyName", previousValue: "", nextValue: "Qiu" },
+          { field: "company", previousValue: null, nextValue: "Aihola" },
+          { field: "jobTitle", previousValue: null, nextValue: "Founder" },
+          { field: "phones", previousValue: [], nextValue: ["+86 138 0000 0000"] },
+          { field: "emails", previousValue: [], nextValue: ["kai@example.com"] },
+          { field: "notes", previousValue: null, nextValue: "Primary work contact." },
+          { field: "isSelf", previousValue: false, nextValue: true },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("accepts a grounded meeting update", () => {
     const result = ActionCardSchema.safeParse({
       id: "action-update-meeting",
@@ -156,6 +186,11 @@ describe("ActionCardSchema", () => {
             field: "endAt",
             previousValue: "2026-08-27T07:30:00.000Z",
             nextValue: "2026-08-28T08:30:00.000Z",
+          },
+          {
+            field: "allDay",
+            previousValue: false,
+            nextValue: true,
           },
         ],
       },

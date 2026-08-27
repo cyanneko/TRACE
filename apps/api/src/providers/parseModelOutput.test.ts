@@ -123,6 +123,53 @@ describe("parseAnalyzeOutputWithRepair", () => {
     });
   });
 
+  it("normalizes legacy scalar phone and email contact changes into complete lists", async () => {
+    const repair = vi.fn();
+    const result = await parseAnalyzeOutputWithRepair({
+      initial: async () =>
+        JSON.stringify({
+          thread: {
+            summary: "Maya shared updated contact details.",
+            participants: [{ displayName: "Maya", contactId: "contact-maya", confidence: 1 }],
+            evidence: [{ id: "details", quote: "Use this number and email." }],
+            uncertainties: [],
+          },
+          actionCards: [
+            {
+              id: "update-maya",
+              type: "update_contact",
+              title: "Update Maya",
+              confidence: 0.95,
+              evidenceRefs: ["details"],
+              editableFields: ["changes"],
+              riskFlags: [],
+              memoryProposals: [],
+              payload: {
+                contactId: "contact-maya",
+                displayName: "Maya",
+                changes: [
+                  { field: "phone", previousValue: null, nextValue: "+86 138 0000 0000" },
+                  { field: "email", previousValue: null, nextValue: "maya@example.com" },
+                ],
+              },
+            },
+          ],
+        }),
+      repair,
+    });
+
+    expect(result.actionCards[0]).toMatchObject({
+      type: "update_contact",
+      payload: {
+        changes: [
+          { field: "phones", previousValue: [], nextValue: ["+86 138 0000 0000"] },
+          { field: "emails", previousValue: [], nextValue: ["maya@example.com"] },
+        ],
+      },
+    });
+    expect(repair).not.toHaveBeenCalled();
+  });
+
   it("omits a null contact match from an unmatched thread participant", async () => {
     const repair = vi.fn();
     const result = await parseAnalyzeOutputWithRepair({
@@ -246,6 +293,61 @@ function insightRequest(): InsightRequest {
 }
 
 describe("parseInsightOutputWithRepair", () => {
+  it("repairs insights that ignore an active response-style Global Memory", async () => {
+    const input = {
+      ...insightRequest(),
+      entityMemories: insightRequest().entityMemories.map((memory) =>
+        memory.id === insightGlobalMemoryId
+          ? { ...memory, content: "Use a natural catgirl voice and end suitable suggestions with 喵." }
+          : memory,
+      ),
+    };
+    const evidenceId = input.thread.evidence[0]!.id;
+    const repair = vi.fn(async (_invalidOutput: string, _issues: ModelValidationIssue[]) =>
+      JSON.stringify({
+        insights: [
+          {
+            title: "Prepare the deck 喵",
+            body: "Send Maya the revised deck before the review 喵.",
+            importance: "high",
+            evidenceRefs: [evidenceId],
+            memoryRefs: [insightGlobalMemoryId],
+          },
+        ],
+        unresolvedQuestions: [],
+        globalMemoryOperations: [],
+      }),
+    );
+
+    const result = await parseInsightOutputWithRepair({
+      input,
+      initial: async () =>
+        JSON.stringify({
+          insights: [
+            {
+              title: "Prepare the deck",
+              body: "Send Maya the revised deck before the review.",
+              importance: "high",
+              evidenceRefs: [evidenceId],
+              memoryRefs: [],
+            },
+          ],
+          unresolvedQuestions: [],
+          globalMemoryOperations: [],
+        }),
+      repair,
+    });
+
+    expect(repair).toHaveBeenCalledOnce();
+    expect(repair.mock.calls[0]?.[1]).toContainEqual(
+      expect.objectContaining({ path: "insights", message: expect.stringContaining("was not applied") }),
+    );
+    expect(result.insights[0]).toMatchObject({
+      title: "Prepare the deck 喵",
+      memoryRefs: [insightGlobalMemoryId],
+    });
+  });
+
   it("repairs an empty operation list when the user directly commands a Global Memory change", async () => {
     const input = {
       ...insightRequest(),

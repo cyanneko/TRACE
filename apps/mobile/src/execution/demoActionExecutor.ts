@@ -50,10 +50,26 @@ export class DemoActionExecutor implements ActionExecutor {
       return existing.result;
     }
 
+    const isUpdate = action.type === "update_contact" || action.type === "update_meeting";
+    if (isUpdate && !context?.targetExternalId && !context?.targetLocalId) {
+      return {
+        actionId: action.id,
+        success: false,
+        provider: "demo",
+        error: "A matched local entity is required before applying an update.",
+      };
+    }
+
     let externalId = context?.targetExternalId;
-    if (!externalId && action.type === "update_contact") externalId = action.payload.contactId ?? undefined;
-    if (!externalId && action.type === "update_meeting") externalId = action.payload.meetingId ?? undefined;
-    externalId ??= `demo-${externalPrefix(action)}-${this.createId()}`;
+    if (!externalId && !context?.targetLocalId && action.type === "update_contact") {
+      externalId = action.payload.contactId ?? undefined;
+    }
+    if (!externalId && !context?.targetLocalId && action.type === "update_meeting") {
+      externalId = action.payload.meetingId ?? undefined;
+    }
+    if (!externalId && !context?.targetLocalId) {
+      externalId = `demo-${externalPrefix(action)}-${this.createId()}`;
+    }
 
     const result: ToolResult = {
       actionId: action.id,

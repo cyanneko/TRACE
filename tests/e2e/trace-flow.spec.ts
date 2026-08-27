@@ -26,6 +26,83 @@ async function uploadAndAnalyze(page: Page) {
   await expect(page.getByRole("button", { name: "Confirm meetings" })).toBeVisible();
 }
 
+test("contact update cards edit and persist the complete contact profile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?__trace_fixture=update-contact");
+  await uploadScreenshot(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+
+  await expect(page.getByText("Editing Maya Chen", { exact: true })).toBeVisible();
+  await page.getByLabel("Given name").fill("Maya");
+  await page.getByLabel("Family name").fill("Chen");
+  await page.getByLabel("Phone numbers").fill("+86 138 0000 1208\n+86 139 0000 2208");
+  await page.getByLabel("Email addresses").fill("maya@example.com\nmaya@northstar.example");
+  await page.getByLabel("Notes").fill("Use the Northstar work profile.");
+  await page.getByLabel("This contact is me: Maya Chen").click();
+  await expect(page.getByText("8 changed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
+
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
+  await page.getByRole("button", { name: "Finish with contacts" }).click();
+
+  const stored = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<Record<string, unknown>>;
+      memories?: Array<{ ownerId: string; ownerType: string }>;
+    };
+    const contact = state.contacts?.find((item) => item.displayName === "Maya Chen");
+    return {
+      contact,
+      ownedMemoryCount: state.memories?.filter(
+        (memory) => memory.ownerType === "contact" && memory.ownerId === contact?.id,
+      ).length,
+    };
+  });
+  expect(stored.contact).toMatchObject({
+    company: "Northstar",
+    jobTitle: "Head of Product",
+    givenName: "Maya",
+    familyName: "Chen",
+    phones: ["+86 138 0000 1208", "+86 139 0000 2208"],
+    emails: ["maya@example.com", "maya@northstar.example"],
+    notes: "Use the Northstar work profile.",
+    isSelf: true,
+  });
+  expect(stored.ownedMemoryCount).toBe(1);
+});
+
+test("meeting update cards persist rescheduled time and every meeting field", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?__trace_fixture=update-meeting");
+  await uploadScreenshot(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
+
+  await expect(page.getByText("Editing 与 Maya 的设计评审", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 changed", { exact: true })).toBeVisible();
+  await page.getByLabel("All-day meeting: 与 Maya 的设计评审").click();
+  await page.getByLabel("Location").fill("Room 8");
+  await page.getByLabel("Meeting link").fill("https://example.com/review");
+  await page.getByLabel("Notes").fill("Bring the final deck.");
+  expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+
+  const meeting = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      meetings?: Array<Record<string, unknown>>;
+    };
+    return state.meetings?.find((item) => item.title === "与 Maya 的设计评审");
+  });
+  expect(meeting).toMatchObject({
+    startAt: "2026-08-28T08:00:00.000Z",
+    endAt: "2026-08-28T08:30:00.000Z",
+    allDay: true,
+    location: "Room 8",
+    meetingLink: "https://example.com/review",
+    notes: "Bring the final deck.",
+  });
+});
+
 test("confirmed actions persist memory and inform the next thread", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -312,7 +389,7 @@ test("insights receive the full thread and all memory scopes before updating glo
     thread?: { summary?: string; evidence?: Array<{ id: string }> };
     confirmedActions?: Array<{ id: string }>;
     toolResults?: Array<{ actionId: string; success: boolean }>;
-    entityMemories?: Array<{ ownerType: string }>;
+    entityMemories?: Array<{ content: string; id: string; ownerType: string }>;
     contacts?: unknown[];
     meetings?: unknown[];
   } | null = null;
@@ -321,8 +398,28 @@ test("insights receive the full thread and all memory scopes before updating glo
     const response = await route.fetch();
     const result = (await response.json()) as {
       globalMemoryOperations: unknown[];
+      insights: Array<{
+        body: string;
+        evidenceRefs: string[];
+        importance: "high" | "medium" | "low";
+        memoryRefs: string[];
+        nextStep?: string;
+        suggestedMessage?: string;
+        title: string;
+      }>;
     };
     const evidenceId = insightRequest?.thread?.evidence?.[0]?.id;
+    const styleMemory = insightRequest?.entityMemories?.find(
+      (memory) => memory.ownerType === "global" && memory.content.includes("猫娘"),
+    );
+    if (result.insights[0] && styleMemory) {
+      result.insights[0] = {
+        ...result.insights[0],
+        title: "会前准备要跟上喵",
+        body: "Maya 已确认会议，记得按约准备新版方案喵。",
+        memoryRefs: [styleMemory.id],
+      };
+    }
     result.globalMemoryOperations = [
       {
         type: "create",
@@ -337,7 +434,7 @@ test("insights receive the full thread and all memory scopes before updating glo
   await page.goto("/?__trace_fixture=meeting");
   await page.getByRole("tab", { name: "Global memory" }).click();
   await page.getByLabel("Add memory").click();
-  await page.getByPlaceholder("Memory").fill("Prefer concise summaries across threads.");
+  await page.getByPlaceholder("Memory").fill("洞察和建议使用自然的猫娘语气，在合适的句尾加喵。");
   await page.getByLabel("Save memory").click();
 
   await page.getByRole("tab", { name: "Contacts" }).click();
@@ -357,6 +454,9 @@ test("insights receive the full thread and all memory scopes before updating glo
   await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
   await page.getByRole("button", { name: "Confirm meetings" }).click();
 
+  await expect(page.getByText("会前准备要跟上喵", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maya 已确认会议，记得按约准备新版方案喵。", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 active memory reference(s)", { exact: true })).toBeVisible();
   await expect(page.getByText("Global memory updated", { exact: true })).toBeVisible();
   await expect(page.getByText("1 automatic change applied", { exact: true })).toBeVisible();
   expect(insightRequest).not.toBeNull();
@@ -371,6 +471,9 @@ test("insights receive the full thread and all memory scopes before updating glo
   ]);
   expect(new Set(insightRequest?.entityMemories?.map((memory) => memory.ownerType))).toEqual(
     new Set(["global", "contact", "meeting"]),
+  );
+  expect(insightRequest?.entityMemories).toContainEqual(
+    expect.objectContaining({ ownerType: "global", content: expect.stringContaining("猫娘") }),
   );
   expect(insightRequest?.contacts?.length).toBeGreaterThan(0);
   expect(insightRequest?.meetings?.length).toBeGreaterThan(0);

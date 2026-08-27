@@ -4,10 +4,13 @@ function contactSummary(contact: ContactRecord): ContactSummary {
   return {
     id: contact.id,
     displayName: contact.displayName,
+    givenName: contact.givenName,
+    familyName: contact.familyName,
     company: contact.company ?? "",
     jobTitle: contact.jobTitle ?? "",
     phones: contact.phones,
     emails: contact.emails,
+    notes: contact.notes,
     isSelf: contact.isSelf,
   };
 }
@@ -43,10 +46,13 @@ export function mergeContactContext(
     return {
       id: local.id,
       displayName: source.displayName || local.displayName,
+      givenName: source.givenName || local.givenName,
+      familyName: source.familyName || local.familyName,
       company: source.company || local.company || "",
       jobTitle: source.jobTitle || local.jobTitle || "",
       phones: source.phones.length > 0 ? source.phones : local.phones,
       emails: source.emails.length > 0 ? source.emails : local.emails,
+      notes: source.notes || local.notes,
       isSelf: local.isSelf || source.isSelf || undefined,
     };
   });

@@ -4,6 +4,7 @@ import {
   type CreateContactCard,
   type CreateMeetingCard,
   type MemoryEntry,
+  type UpdateContactCard,
   type UpdateMeetingCard,
 } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
@@ -371,6 +372,131 @@ describe("WebEntityRepository", () => {
     const contacts = await entities.listContacts();
     expect(contacts.filter((contact) => contact.isSelf)).toHaveLength(1);
     expect(contacts.find((contact) => contact.isSelf)?.displayName).toBe("Kai");
+  });
+
+  it("applies every contact update field without turning basic notes into memory", async () => {
+    const entities = repository(memoryStore());
+    const draft = await entities.createContactDraft();
+    await entities.saveContact({
+      ...draft,
+      displayName: "Kai",
+      givenName: "Kai",
+      company: "Old Co",
+      phones: ["10086"],
+      status: "active",
+    });
+    const action: UpdateContactCard = {
+      id: "update-kai-profile",
+      type: "update_contact",
+      title: "Update Kai's profile",
+      confidence: 0.98,
+      evidenceRefs: ["evidence-profile"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        contactId: draft.id,
+        displayName: "Kai",
+        changes: [
+          { field: "displayName", previousValue: "Kai", nextValue: "Kai Qiu" },
+          { field: "givenName", previousValue: "Kai", nextValue: "Kaixi" },
+          { field: "familyName", previousValue: null, nextValue: "Qiu" },
+          { field: "company", previousValue: "Old Co", nextValue: "Aihola" },
+          { field: "jobTitle", previousValue: null, nextValue: "Founder" },
+          { field: "phones", previousValue: ["10086"], nextValue: ["+86 138 0000 0000"] },
+          { field: "emails", previousValue: [], nextValue: ["kai@example.com"] },
+          { field: "notes", previousValue: null, nextValue: "Primary work contact." },
+          { field: "isSelf", previousValue: false, nextValue: true },
+        ],
+      },
+    };
+
+    await entities.commitSuccessfulAction({
+      sourceRunId: "20000000-0000-4000-8000-000000000030",
+      action,
+      result: { actionId: action.id, success: true, provider: "demo", externalId: draft.id },
+      timezone: "Asia/Shanghai",
+    });
+
+    await expect(entities.findContact(draft.id)).resolves.toMatchObject({
+      displayName: "Kai Qiu",
+      givenName: "Kaixi",
+      familyName: "Qiu",
+      company: "Aihola",
+      jobTitle: "Founder",
+      phones: ["+86 138 0000 0000"],
+      emails: ["kai@example.com"],
+      notes: "Primary work contact.",
+      isSelf: true,
+    });
+    await expect(entities.listMemories({ ownerType: "contact", ownerId: draft.id })).resolves.toEqual([]);
+  });
+
+  it("applies every meeting update field, including rescheduled time and all-day state", async () => {
+    const entities = repository(memoryStore());
+    const contact = await entities.createContactDraft();
+    await entities.saveContact({ ...contact, displayName: "Maya", status: "active" });
+    const meeting = await entities.createMeetingDraft("Asia/Shanghai");
+    await entities.saveMeeting({
+      ...meeting,
+      title: "Design review",
+      startAt: "2026-08-27T07:00:00.000Z",
+      endAt: "2026-08-27T07:30:00.000Z",
+      status: "active",
+    });
+    const action: UpdateMeetingCard = {
+      id: "update-review-complete",
+      type: "update_meeting",
+      title: "Reschedule the design review",
+      confidence: 0.99,
+      evidenceRefs: ["evidence-reschedule"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        meetingId: meeting.id,
+        displayTitle: "Design review",
+        participantNames: [],
+        changes: [
+          { field: "title", previousValue: "Design review", nextValue: "Final design review" },
+          {
+            field: "startAt",
+            previousValue: "2026-08-27T07:00:00.000Z",
+            nextValue: "2026-08-28T08:00:00.000Z",
+          },
+          {
+            field: "endAt",
+            previousValue: "2026-08-27T07:30:00.000Z",
+            nextValue: "2026-08-28T08:30:00.000Z",
+          },
+          { field: "timezone", previousValue: "Asia/Shanghai", nextValue: "Asia/Tokyo" },
+          { field: "allDay", previousValue: false, nextValue: true },
+          { field: "location", previousValue: null, nextValue: "Room 8" },
+          { field: "meetingLink", previousValue: null, nextValue: "https://example.com/review" },
+          { field: "notes", previousValue: null, nextValue: "Bring the final deck." },
+          { field: "participantContactIds", previousValue: [], nextValue: [contact.id] },
+        ],
+      },
+    };
+
+    await entities.commitSuccessfulAction({
+      sourceRunId: "20000000-0000-4000-8000-000000000031",
+      action,
+      result: { actionId: action.id, success: true, provider: "demo", externalId: meeting.id },
+      timezone: "Asia/Shanghai",
+    });
+
+    await expect(entities.findMeeting(meeting.id)).resolves.toMatchObject({
+      title: "Final design review",
+      startAt: "2026-08-28T08:00:00.000Z",
+      endAt: "2026-08-28T08:30:00.000Z",
+      timezone: "Asia/Tokyo",
+      allDay: true,
+      location: "Room 8",
+      meetingLink: "https://example.com/review",
+      notes: "Bring the final deck.",
+      participantContactIds: [contact.id],
+    });
   });
 
   it("updates a meeting participant relationship with a local contact id", async () => {

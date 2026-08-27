@@ -58,9 +58,9 @@ export class ExpoActionExecutor implements ActionExecutor {
         return await this.createContact(action);
       }
       if (action.type === "update_contact") {
-        return await this.updateContact(action, context?.targetExternalId);
+        return await this.updateContact(action, context);
       }
-      return await this.updateMeeting(action, context?.targetExternalId);
+      return await this.updateMeeting(action, context);
     } catch (error) {
       return failed(action.id, error instanceof Error ? error.message : "The native write failed.");
     }
@@ -124,11 +124,28 @@ export class ExpoActionExecutor implements ActionExecutor {
 
   private async updateContact(
     action: Extract<ActionCard, { type: "update_contact" }>,
-    targetExternalId?: string,
+    context?: ActionExecutionContext,
   ): Promise<ToolResult> {
-    const contactId = targetExternalId ?? action.payload.contactId;
-    if (!contactId) {
-      return failed(action.id, "A matched contact is required before updating native contacts.");
+    if (!context?.targetExternalId && context?.targetLocalId) {
+      return {
+        actionId: action.id,
+        success: true,
+        provider: "native",
+      };
+    }
+    if (!context?.targetExternalId) {
+      return failed(action.id, "A matched contact is required before updating contacts.");
+    }
+    const contactId = context.targetExternalId;
+
+    const hasNativeChanges = action.payload.changes.some((change) => change.field !== "isSelf");
+    if (!hasNativeChanges) {
+      return {
+        actionId: action.id,
+        success: true,
+        provider: "native",
+        externalId: contactId,
+      };
     }
 
     const permission = await requestContactsPermissions();
@@ -138,49 +155,37 @@ export class ExpoActionExecutor implements ActionExecutor {
 
     const contact = new Contact(contactId);
     const patch: ContactPatch = {};
-    const phoneChanges = action.payload.changes.filter((change) => change.field === "phone");
-    const emailChanges = action.payload.changes.filter((change) => change.field === "email");
+    const displayNameChange = action.payload.changes.find((change) => change.field === "displayName");
+    const givenNameChange = action.payload.changes.find((change) => change.field === "givenName");
+    const familyNameChange = action.payload.changes.find((change) => change.field === "familyName");
+    const phonesChange = action.payload.changes.find((change) => change.field === "phones");
+    const emailsChange = action.payload.changes.find((change) => change.field === "emails");
 
     for (const change of action.payload.changes) {
-      if (change.field === "company") patch.company = change.nextValue;
-      if (change.field === "jobTitle") patch.jobTitle = change.nextValue;
-      if (change.field === "givenName") patch.givenName = change.nextValue;
-      if (change.field === "familyName") patch.familyName = change.nextValue;
-      if (change.field === "notes") patch.note = change.nextValue;
-      if (change.field === "displayName") {
-        patch.givenName = change.nextValue;
-        patch.familyName = null;
-      }
+      if (change.field === "company") patch.company = change.nextValue || null;
+      if (change.field === "jobTitle") patch.jobTitle = change.nextValue || null;
+      if (change.field === "givenName") patch.givenName = change.nextValue || null;
+      if (change.field === "familyName") patch.familyName = change.nextValue || null;
+      if (change.field === "notes") patch.note = change.nextValue || null;
     }
 
-    if (phoneChanges.length > 0) {
-      const phones: NonNullable<ContactPatch["phones"]> = [...(await contact.getPhones())];
-      for (const change of phoneChanges) {
-        const index = change.previousValue
-          ? phones.findIndex((phone) => phone.number === change.previousValue)
-          : -1;
-        if (index >= 0) {
-          phones[index] = { ...phones[index]!, number: change.nextValue };
-        } else {
-          phones.push({ label: "mobile", number: change.nextValue });
-        }
-      }
-      patch.phones = phones;
+    if (displayNameChange?.field === "displayName" && !givenNameChange && !familyNameChange) {
+      patch.givenName = displayNameChange.nextValue;
+      patch.familyName = null;
     }
 
-    if (emailChanges.length > 0) {
-      const emails: NonNullable<ContactPatch["emails"]> = [...(await contact.getEmails())];
-      for (const change of emailChanges) {
-        const index = change.previousValue
-          ? emails.findIndex((email) => email.address === change.previousValue)
-          : -1;
-        if (index >= 0) {
-          emails[index] = { ...emails[index]!, address: change.nextValue };
-        } else {
-          emails.push({ label: "work", address: change.nextValue });
-        }
-      }
-      patch.emails = emails;
+    if (phonesChange?.field === "phones") {
+      const existingPhones = await contact.getPhones();
+      patch.phones = phonesChange.nextValue.map(
+        (number) => existingPhones.find((phone) => phone.number === number) ?? { label: "mobile", number },
+      );
+    }
+
+    if (emailsChange?.field === "emails") {
+      const existingEmails = await contact.getEmails();
+      patch.emails = emailsChange.nextValue.map(
+        (address) => existingEmails.find((email) => email.address === address) ?? { label: "work", address },
+      );
     }
 
     await contact.patch(patch);
@@ -194,8 +199,11 @@ export class ExpoActionExecutor implements ActionExecutor {
 
   private async updateMeeting(
     action: Extract<ActionCard, { type: "update_meeting" }>,
-    targetExternalId?: string,
+    context?: ActionExecutionContext,
   ): Promise<ToolResult> {
+    if (!context?.targetExternalId && !context?.targetLocalId) {
+      return failed(action.id, "A matched meeting is required before updating a calendar event.");
+    }
     const patch: Partial<Calendar.ModifiableEventProperties> = {};
     for (const change of action.payload.changes) {
       if (change.field === "title") patch.title = change.nextValue!;
@@ -203,6 +211,7 @@ export class ExpoActionExecutor implements ActionExecutor {
       if (change.field === "location") patch.location = change.nextValue;
       if (change.field === "meetingLink") patch.url = change.nextValue ?? "";
       if (change.field === "notes") patch.notes = change.nextValue ?? "";
+      if (change.field === "allDay") patch.allDay = change.nextValue;
       if (change.field === "startAt") {
         if (!change.nextValue) return failed(action.id, "A meeting start time cannot be cleared.");
         patch.startDate = new Date(change.nextValue);
@@ -215,14 +224,21 @@ export class ExpoActionExecutor implements ActionExecutor {
 
     const hasCalendarChanges = Object.keys(patch).length > 0;
     if (hasCalendarChanges) {
-      if (!targetExternalId) {
-        return failed(action.id, "A linked calendar event is required before updating this meeting.");
+      if (!context?.targetExternalId && context?.targetLocalId) {
+        return {
+          actionId: action.id,
+          success: true,
+          provider: "native",
+        };
+      }
+      if (!context?.targetExternalId) {
+        return failed(action.id, "A matched meeting is required before updating a calendar event.");
       }
       const permission = await Calendar.requestCalendarPermissions(false);
       if (permission.status !== "granted") {
         return failed(action.id, "Calendar access permission was not granted.");
       }
-      const event = await Calendar.ExpoCalendarEvent.get(targetExternalId);
+      const event = await Calendar.ExpoCalendarEvent.get(context.targetExternalId);
       await event.update(patch);
     }
 
@@ -230,7 +246,7 @@ export class ExpoActionExecutor implements ActionExecutor {
       actionId: action.id,
       success: true,
       provider: "native",
-      externalId: targetExternalId,
+      externalId: context?.targetExternalId,
     };
   }
 

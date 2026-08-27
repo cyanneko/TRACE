@@ -8,6 +8,7 @@ import {
 } from "@trace/contracts";
 
 import { hasExplicitGlobalMemoryInstruction } from "../insights/globalMemoryInstruction.js";
+import { isResponseBehaviorMemory } from "../insights/responseBehaviorMemory.js";
 
 export type ModelValidationIssue = {
   message: string;
@@ -145,6 +146,25 @@ function normalizeModelOutput(value: unknown): unknown {
       if (payload.isSelf === null) payload.isSelf = false;
     }
 
+    if (action.type === "update_contact" && Array.isArray(payload.changes)) {
+      for (const changeValue of payload.changes) {
+        const change = asRecord(changeValue);
+        if (!change) continue;
+
+        if (change.field === "phone") change.field = "phones";
+        if (change.field === "email") change.field = "emails";
+        if (change.field === "phones" || change.field === "emails") {
+          for (const field of ["previousValue", "nextValue"] as const) {
+            if (change[field] === null) change[field] = [];
+            else if (typeof change[field] === "string") {
+              const normalized = change[field].trim();
+              change[field] = normalized ? [normalized] : [];
+            }
+          }
+        }
+      }
+    }
+
     if (action.type === "update_meeting") {
       if (payload.participantNames === null) payload.participantNames = [];
       if (Array.isArray(payload.changes)) {
@@ -236,6 +256,20 @@ function insightReferenceIssues(input: InsightRequest, bundle: InsightBundle): M
       }
     });
   });
+
+  if (bundle.insights.length > 0) {
+    const appliedMemoryIds = new Set(bundle.insights.flatMap((insight) => insight.memoryRefs));
+    for (const memory of activeMemories.filter(
+      (candidate) => candidate.ownerType === "global" && isResponseBehaviorMemory(candidate.content),
+    )) {
+      if (!appliedMemoryIds.has(memory.id)) {
+        issues.push({
+          message: `Active response-style Global Memory ${memory.id} was not applied. Visibly follow it in the user-facing insight text and cite its exact ID in memoryRefs.`,
+          path: "insights",
+        });
+      }
+    }
+  }
 
   bundle.globalMemoryOperations.forEach((operation, operationIndex) => {
     operation.evidenceRefs.forEach((reference, referenceIndex) => {

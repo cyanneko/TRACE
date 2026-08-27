@@ -53,6 +53,10 @@ describe("buildAnalyzePrompt", () => {
     expect(prompt).toContain("create_contact with isSelf true");
     expect(prompt).toContain("Meetings must include every attendee, including the user");
     expect(prompt).toContain("For update_meeting, put pending names in payload.participantNames");
+    expect(prompt).toContain("complete phones and emails lists");
+    expect(prompt).toContain("never encode a reschedule only as notes or memory");
+    expect(prompt).toContain("always emit a startAt change");
+    expect(prompt).toContain("also emit the corresponding endAt change");
     expect(prompt).toContain("UTC ISO 8601 timestamps ending in Z");
     expect(prompt).not.toContain("at most three actions");
   });

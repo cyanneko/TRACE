@@ -1,4 +1,4 @@
-import type { CreateContactCard, ToolResult } from "@trace/contracts";
+import type { CreateContactCard, ToolResult, UpdateContactCard } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
 import { WebEntityRepository } from "../entities/webEntityRepository";
@@ -101,6 +101,48 @@ describe("executeAndCommit", () => {
       entityRef: { type: "contact", externalId: "demo-contact-river" },
     });
     expect(await repository.listContacts()).toHaveLength(1);
+  });
+
+  it("identifies a local-only update target without inventing an external contact id", async () => {
+    const repository = entities();
+    const contact = await repository.createContactDraft();
+    await repository.saveContact({ ...contact, displayName: "Kai", status: "active" });
+    const update: UpdateContactCard = {
+      id: "update-local-kai",
+      type: "update_contact",
+      title: "Update Kai",
+      confidence: 1,
+      evidenceRefs: ["evidence-company"],
+      editableFields: ["changes"],
+      riskFlags: [],
+      memoryProposals: [],
+      payload: {
+        contactId: contact.id,
+        displayName: "Kai",
+        changes: [{ field: "company", previousValue: null, nextValue: "Aihola" }],
+      },
+    };
+    let receivedContext: Parameters<ActionExecutor["execute"]>[2];
+    const executor: ActionExecutor = {
+      execute: async (_sourceRunId, currentAction, context): Promise<ToolResult> => {
+        receivedContext = context;
+        return { actionId: currentAction.id, success: true, provider: "demo" };
+      },
+    };
+
+    const result = await executeAndCommit(
+      "20000000-0000-4000-8000-000000000012",
+      update,
+      executor,
+      repository,
+      "Asia/Shanghai",
+    );
+
+    expect(receivedContext).toEqual({ targetExternalId: undefined, targetLocalId: contact.id });
+    expect(result).toMatchObject({ success: true, entityRef: { id: contact.id, type: "contact" } });
+    const updated = await repository.findContact(contact.id);
+    expect(updated).toMatchObject({ company: "Aihola" });
+    expect(updated?.externalContactId).toBeUndefined();
   });
 
   it("reports a pending local failure without hiding the successful external id", async () => {

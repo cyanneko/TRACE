@@ -77,11 +77,46 @@ export const CreateContactCardSchema = ActionCardBaseSchema.extend({
   }),
 });
 
-export const ContactChangeSchema = z.object({
-  field: z.enum(["displayName", "givenName", "familyName", "company", "jobTitle", "phone", "email", "notes"]),
-  previousValue: z.string().nullable(),
-  nextValue: NonEmptyStringSchema,
+const ContactTextChangeSchema = z
+  .object({
+    field: z.enum(["displayName", "givenName", "familyName", "company", "jobTitle", "notes"]),
+    previousValue: z.string().nullable(),
+    nextValue: z.string().nullable(),
+  })
+  .superRefine((change, context) => {
+    if (change.field === "displayName" && !change.nextValue?.trim()) {
+      context.addIssue({
+        code: "custom",
+        message: "displayName cannot be empty.",
+        path: ["nextValue"],
+      });
+    }
+  });
+
+const ContactPhonesChangeSchema = z.object({
+  field: z.literal("phones"),
+  previousValue: z.array(NonEmptyStringSchema),
+  nextValue: z.array(NonEmptyStringSchema),
 });
+
+const ContactEmailsChangeSchema = z.object({
+  field: z.literal("emails"),
+  previousValue: z.array(z.email()),
+  nextValue: z.array(z.email()),
+});
+
+const ContactSelfChangeSchema = z.object({
+  field: z.literal("isSelf"),
+  previousValue: z.boolean(),
+  nextValue: z.boolean(),
+});
+
+export const ContactChangeSchema = z.discriminatedUnion("field", [
+  ContactTextChangeSchema,
+  ContactPhonesChangeSchema,
+  ContactEmailsChangeSchema,
+  ContactSelfChangeSchema,
+]);
 
 export const UpdateContactCardSchema = ActionCardBaseSchema.extend({
   type: z.literal("update_contact"),
@@ -120,10 +155,17 @@ const MeetingParticipantsChangeSchema = z.object({
   nextValue: z.array(NonEmptyStringSchema),
 });
 
+const MeetingAllDayChangeSchema = z.object({
+  field: z.literal("allDay"),
+  previousValue: z.boolean(),
+  nextValue: z.boolean(),
+});
+
 export const MeetingChangeSchema = z.discriminatedUnion("field", [
   MeetingTextChangeSchema,
   MeetingTimeChangeSchema,
   MeetingParticipantsChangeSchema,
+  MeetingAllDayChangeSchema,
 ]);
 
 export const UpdateMeetingCardSchema = ActionCardBaseSchema.extend({
@@ -216,10 +258,13 @@ export const AnalyzeModelOutputSchema = AnalyzeResultSchema.omit({
 export const ContactSummarySchema = z.object({
   id: NonEmptyStringSchema,
   displayName: NonEmptyStringSchema,
+  givenName: z.string().optional(),
+  familyName: z.string().optional(),
   company: z.string(),
   jobTitle: z.string(),
   phones: z.array(z.string()),
   emails: z.array(z.string()),
+  notes: z.string().optional(),
   isSelf: z.boolean().optional(),
 });
 
@@ -235,6 +280,7 @@ export const ContactRecordSchema = z
     jobTitle: z.string().trim().max(500).optional(),
     phones: z.array(NonEmptyStringSchema),
     emails: z.array(z.email()),
+    notes: z.string().max(10_000).optional(),
     isSelf: z.boolean(),
     status: z.enum(["draft", "active"]),
     source: z.enum(["ios", "trace", "demo"]),

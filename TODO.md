@@ -696,6 +696,32 @@ npm run build:web
 
 Commit: `fix(memory): honor explicit global memory commands`
 
+## Iteration 28 - Complete Updates and Applied Global Memory
+
+Status: completed
+
+- [x] Preserve Iteration 27 as `iteration-27-explicit-global-memory-commands` before editing.
+- [x] Audit every editable contact and meeting field from model output through confirmation and persistence.
+- [x] Trace active Global Memory from local storage into analysis and Insight generation.
+- [x] Let contact update cards edit all TRACE contact fields and submit only actual changes.
+- [x] Let meeting update cards edit all TRACE meeting fields, including participants and all-day state.
+- [x] Keep contact notes as basic contact data instead of silently converting them into entity memory.
+- [x] Apply relevant Global Memory response-style and persona preferences to current and future Insight output without changing factual grounding.
+- [x] Cover complete updates and catgirl-style Global Memory behavior with automated tests.
+- [x] Run regression checks, Web build, iOS export, and mobile visual verification.
+- [x] Publish the iteration to GitHub.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+(cd apps/mobile && npx expo export --platform ios)
+```
+
+Commit: `feat(actions): support complete entity updates`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.
