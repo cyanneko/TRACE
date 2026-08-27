@@ -1044,6 +1044,7 @@ export default function App() {
             analysis={analysis}
             cards={cards}
             compact={compact}
+            contacts={entityContacts}
             error={error}
             feedback={reviewFeedback[reviewStage]}
             onBack={reset}
@@ -1062,6 +1063,7 @@ export default function App() {
             screenshot={screenshot}
             selectedIds={selectedIds}
             stage={reviewStage}
+            meetings={entityMeetings}
           />
         ) : phase === "result" && analysis ? (
           <ResultScreen
@@ -1262,6 +1264,7 @@ type ReviewProps = {
   analysis: AnalyzeResult;
   cards: ActionCard[];
   compact: boolean;
+  contacts: ContactRecord[];
   confirmedActionCount: number;
   error: string | null;
   feedback: string;
@@ -1278,12 +1281,14 @@ type ReviewProps = {
   screenshot: SelectedScreenshot | null;
   selectedIds: Set<string>;
   stage: ReviewStage;
+  meetings: MeetingRecord[];
 };
 
 function ReviewScreen({
   analysis,
   cards,
   compact,
+  contacts,
   confirming,
   confirmedActionCount,
   error,
@@ -1300,6 +1305,7 @@ function ReviewScreen({
   screenshot,
   selectedIds,
   stage,
+  meetings,
 }: ReviewProps) {
   const evidenceById = useMemo(
     () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
@@ -1418,11 +1424,13 @@ function ReviewScreen({
             {stageCards.map((card) => (
               <ActionCardView
                 card={card}
+                contacts={contacts}
                 evidence={card.evidenceRefs.flatMap((id) => {
                   const item = evidenceById.get(id);
                   return item ? [item] : [];
                 })}
                 key={card.id}
+                meetings={meetings}
                 onChange={onCardChange}
                 onToggle={() => onCardToggle(card.id)}
                 selected={selectedIds.has(card.id)}

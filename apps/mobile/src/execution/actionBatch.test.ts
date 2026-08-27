@@ -128,6 +128,39 @@ describe("action batch planning", () => {
     }
   });
 
+  it("canonicalizes a direct external participant id without requiring a duplicate name", () => {
+    const sourceContact: ContactRecord = {
+      id: "00000000-0000-4000-8000-000000000205",
+      externalContactId: "contact-maya",
+      displayName: "Maya Chen",
+      phones: [],
+      emails: [],
+      isSelf: false,
+      status: "active",
+      source: "demo",
+      createdAt: "2026-08-26T03:30:00.000Z",
+      updatedAt: "2026-08-26T03:30:00.000Z",
+    };
+    const linked = linkContactsToMeetingAction(
+      {
+        ...meeting,
+        payload: {
+          ...meeting.payload,
+          participantContactIds: [sourceContact.externalContactId!],
+          participantNames: [],
+        },
+      },
+      [meeting],
+      [],
+      [sourceContact],
+    );
+
+    expect(linked.type).toBe("create_meeting");
+    if (linked.type === "create_meeting") {
+      expect(linked.payload.participantContactIds).toEqual([sourceContact.id]);
+    }
+  });
+
   it("adds a same-run self contact to an existing meeting update", () => {
     const selfAction: CreateContactCard = {
       ...contact,

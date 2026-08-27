@@ -513,6 +513,31 @@ npx expo export --platform ios
 
 Commit: `feat(agent): sequence contact and meeting planning`
 
+## Iteration 21 - Meeting Participant Review
+
+Status: completed
+
+- [x] Preserve Iteration 20 as `iteration-20-sequential-agent-planning` before editing.
+- [x] Keep participants visible when a meeting pass returns contact IDs instead of duplicate names.
+- [x] Resolve saved contact IDs to readable names in meeting action cards.
+- [x] Let users add or remove existing contacts with a repeated-toggle checklist.
+- [x] Keep only genuinely unmatched participant names in an editable text field.
+- [x] Apply the same participant editor to create-meeting and update-meeting cards.
+- [x] Cover ID-only and name-only meeting responses plus repeated participant toggles in Playwright.
+- [x] Canonicalize external contact IDs before execution so saved meetings keep local links.
+- [x] Verify mobile layout, Web build, and iOS export before publishing.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `fix(meetings): preserve and edit linked participants`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

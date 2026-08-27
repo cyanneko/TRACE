@@ -168,6 +168,10 @@ test("description-only analysis confirms contacts before meetings and links part
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
   await expect(page.getByText("STEP 2 OF 2", { exact: true })).toBeVisible();
   await expect(page.getByText("创建与林乔的合作沟通", { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^Proposed meeting participants:/)).toContainText("林乔");
+  await page.getByLabel("Edit proposed meeting participants").click();
+  await expect(page.getByLabel("Remove 林乔 from proposed meeting")).toBeChecked();
+  await page.getByLabel("Edit proposed meeting participants").click();
   await page.getByRole("button", { name: "Confirm meetings" }).click();
   await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
 
@@ -192,11 +196,45 @@ test("description-only analysis confirms contacts before meetings and links part
 });
 
 test("self and HR contacts are confirmed before both join the meeting", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const passes: Array<{
     actionScope: string;
     contacts: Array<{ displayName: string; isSelf?: boolean }>;
     reviewFeedback: string;
   }> = [];
+  await page.route("**/v1/analyze", async (route) => {
+    const body = route.request().postDataJSON() as {
+      actionScope: string;
+      contacts: Array<{ displayName: string; id: string }>;
+    };
+    const response = await route.fetch();
+    if (body.actionScope !== "meetings") {
+      await route.fulfill({ response });
+      return;
+    }
+    const result = (await response.json()) as {
+      actionCards: Array<{
+        type: string;
+        payload: Record<string, unknown>;
+      }>;
+    };
+    const participantContactIds = body.contacts
+      .filter((contact) => contact.displayName === "Kai" || contact.displayName === "Lina HR")
+      .map((contact) => contact.id);
+    result.actionCards = result.actionCards.map((card) =>
+      card.type === "create_meeting"
+        ? {
+            ...card,
+            payload: {
+              ...card.payload,
+              participantContactIds,
+              participantNames: [],
+            },
+          }
+        : card,
+    );
+    await route.fulfill({ response, json: result });
+  });
   page.on("request", (request) => {
     if (request.method() !== "POST" || new URL(request.url()).pathname !== "/v1/analyze") return;
     const body = request.postDataJSON() as {
@@ -231,7 +269,16 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
 
   await expect(page.getByText("创建 HR 面试", { exact: true })).toBeVisible();
-  await expect(page.locator('input[value="Me, Lina HR"]')).toBeVisible();
+  await expect(page.getByLabel(/^Proposed meeting participants:/)).toContainText("Kai, Lina HR");
+  await expect(page.getByLabel("Names not matched to contacts")).toHaveCount(0);
+  await page.getByLabel("Edit proposed meeting participants").click();
+  await expect(page.getByLabel("Remove Kai from proposed meeting")).toBeChecked();
+  await expect(page.getByLabel("Remove Lina HR from proposed meeting")).toBeChecked();
+  await page.getByLabel("Remove Kai from proposed meeting").click();
+  await expect(page.getByLabel("Add Kai to proposed meeting")).not.toBeChecked();
+  await page.getByLabel("Add Kai to proposed meeting").click();
+  await expect(page.getByLabel("Remove Kai from proposed meeting")).toBeChecked();
+  await page.getByLabel("Edit proposed meeting participants").click();
   expect(passes.slice(0, 3).map((pass) => pass.actionScope)).toEqual([
     "contacts",
     "contacts",

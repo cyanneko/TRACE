@@ -24,6 +24,7 @@ The model can propose actions, but it cannot execute them. Only validated cards 
 
 - Screenshot selection and optional context on Web and iOS.
 - Editable action cards for meeting creation/update and contact creation/update.
+- Meeting cards resolve local or external contact IDs to names and use an existing-contact checklist for participants.
 - Per-stage written feedback and scoped retries without repeating confirmed writes.
 - Fixture, DeepSeek, GLM, Doubao, and custom OpenAI-compatible vision providers.
 - Deterministic fixture scenarios for all actions plus a conservative no-action case.
@@ -228,7 +229,7 @@ Production Web bundle:
 npm run build:web
 ```
 
-Current automated coverage includes provider configuration, model-output repair, API routes, action contracts, execution idempotency, memory derivation/supersede/delete, reducer failure states, the two-run memory flow, and a 390px no-action viewport.
+Current automated coverage includes provider configuration, model-output repair, API routes, action contracts, execution idempotency, memory derivation/supersede/delete, reducer failure states, the two-run memory flow, ID-only and name-only participant linking, repeated participant toggles, and 390px review states.
 
 ## Privacy And Security
 

@@ -87,12 +87,38 @@ export function linkContactsToMeetingAction(
   if (action.type !== "create_meeting" && action.type !== "update_meeting") {
     return action;
   }
-  const participantNames = action.payload.participantNames;
-  if (participantNames.length === 0) return action;
   const canonicalContactId = (contactId: string) =>
     contacts.find(
       (contact) => contact.id === contactId || contact.externalContactId === contactId,
     )?.id ?? contactId;
+  const canonicalAction: ActionCard =
+    action.type === "create_meeting"
+      ? {
+          ...action,
+          payload: {
+            ...action.payload,
+            participantContactIds: [
+              ...new Set(action.payload.participantContactIds.map(canonicalContactId)),
+            ],
+          },
+        }
+      : {
+          ...action,
+          payload: {
+            ...action.payload,
+            changes: action.payload.changes.map((change) =>
+              change.field === "participantContactIds"
+                ? {
+                    ...change,
+                    previousValue: change.previousValue.map(canonicalContactId),
+                    nextValue: [...new Set(change.nextValue.map(canonicalContactId))],
+                  }
+                : change,
+            ),
+          },
+        };
+  const participantNames = canonicalAction.payload.participantNames;
+  if (participantNames.length === 0) return canonicalAction;
 
   const actionById = new Map(
     confirmedActions
@@ -116,17 +142,17 @@ export function linkContactsToMeetingAction(
     const matches = contactIdsByAlias.get(normalizedName(name));
     return matches?.size === 1 ? [...matches] : [];
   });
-  if (linkedIds.length === 0) return action;
+  if (linkedIds.length === 0) return canonicalAction;
 
-  if (action.type === "update_meeting") {
-    const participantChangeIndex = action.payload.changes.findIndex(
+  if (canonicalAction.type === "update_meeting") {
+    const participantChangeIndex = canonicalAction.payload.changes.findIndex(
       (change) => change.field === "participantContactIds",
     );
-    if (participantChangeIndex < 0 && !existingMeeting) return action;
-    const existingIds = existingMeeting?.participantContactIds ?? [];
+    if (participantChangeIndex < 0 && !existingMeeting) return canonicalAction;
+    const existingIds = (existingMeeting?.participantContactIds ?? []).map(canonicalContactId);
     const changes =
       participantChangeIndex >= 0
-        ? action.payload.changes.map((change, index) =>
+        ? canonicalAction.payload.changes.map((change, index) =>
             index === participantChangeIndex && change.field === "participantContactIds"
               ? {
                   ...change,
@@ -137,23 +163,23 @@ export function linkContactsToMeetingAction(
               : change,
           )
         : [
-            ...action.payload.changes,
+            ...canonicalAction.payload.changes,
             {
               field: "participantContactIds" as const,
               previousValue: existingIds,
               nextValue: [...new Set([...existingIds, ...linkedIds])],
             },
           ];
-    return { ...action, payload: { ...action.payload, changes } };
+    return { ...canonicalAction, payload: { ...canonicalAction.payload, changes } };
   }
 
   return {
-    ...action,
+    ...canonicalAction,
     payload: {
-      ...action.payload,
+      ...canonicalAction.payload,
       participantContactIds: [
         ...new Set([
-          ...action.payload.participantContactIds.map(canonicalContactId),
+          ...canonicalAction.payload.participantContactIds,
           ...linkedIds,
         ]),
       ],
