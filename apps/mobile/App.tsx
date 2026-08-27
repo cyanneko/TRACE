@@ -513,15 +513,33 @@ export default function App() {
       const contactAnalysis = contactAnalysisRef.current ?? currentAnalysis;
       const meetingPass = await runAnalysisPass("meetings", contactAnalysis.thread, feedback);
       const combined = mergeSequentialAnalysis(contactAnalysis, contactCards, meetingPass.result);
-      const orderedCards = orderActionsForExecution(combined.actionCards);
+      const orderedCards = orderActionsForExecution(combined.actionCards).map((action) => {
+        if (!isMeetingAction(action)) return action;
+        const existingMeeting =
+          action.type === "update_meeting" && action.payload.meetingId
+            ? meetingPass.localMeetings.find(
+                (meeting) =>
+                  meeting.id === action.payload.meetingId ||
+                  meeting.externalEventId === action.payload.meetingId,
+              ) ?? null
+            : null;
+        return linkContactsToMeetingAction(
+          action,
+          confirmedActions,
+          stagedResultsRef.current,
+          meetingPass.localContacts,
+          existingMeeting,
+        );
+      });
       const meetingCards = orderedCards.filter(isMeetingAction);
-      setAnalysis(combined);
+      const linkedAnalysis = { ...combined, actionCards: orderedCards };
+      setAnalysis(linkedAnalysis);
       setAnalysisContacts(meetingPass.contacts);
       setActiveMemories(meetingPass.memories);
       setEntityContacts(meetingPass.localContacts);
       setEntityMeetings(meetingPass.localMeetings);
       setEntityMemories(meetingPass.currentEntityMemories);
-      setProvider(combined.provider);
+      setProvider(linkedAnalysis.provider);
       setCards(orderedCards);
       setSelectedIds((current) => {
         const contactIds = new Set(contactCards.map((card) => card.id));
@@ -554,12 +572,25 @@ export default function App() {
     const stageCards = cards.filter(reviewStage === "contacts" ? isContactAction : isMeetingAction);
     const selectedCards = stageCards.filter((card) => selectedIds.has(card.id));
     const validatedCards = selectedCards.map((card) => ActionCardSchema.safeParse(card));
+    const unresolvedUpdate = selectedCards.find(
+      (card) =>
+        (card.type === "update_contact" && !card.payload.contactId) ||
+        (card.type === "update_meeting" && !card.payload.meetingId),
+    );
     const canContinueWithoutStageActions =
       reviewStage === "contacts" ||
       stagedActionsRef.current.length > 0 ||
       (reviewStage === "meetings" && stageCards.length === 0);
     if (selectedCards.length === 0 && !canContinueWithoutStageActions) {
       setError("Select at least one action to continue.");
+      return;
+    }
+    if (unresolvedUpdate) {
+      setError(
+        unresolvedUpdate.type === "update_contact"
+          ? "Choose the saved contact this update should change before confirmation."
+          : "Choose the saved meeting this update should change before confirmation.",
+      );
       return;
     }
     if (validatedCards.some((result) => !result.success)) {
@@ -1093,6 +1124,7 @@ export default function App() {
           />
         ) : phase === "result" && analysis ? (
           <ResultScreen
+            actions={cards}
             analysis={analysis}
             execution={execution}
             executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}

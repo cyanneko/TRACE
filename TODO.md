@@ -722,6 +722,31 @@ npm run build:web
 
 Commit: `feat(actions): support complete entity updates`
 
+## Iteration 29 - Safe Entity Linking and Update Targets
+
+Status: completed
+
+- [x] Reject stale participant, contact, and meeting IDs that no longer exist locally.
+- [x] Resolve contacts by unique identity aliases and meetings by one exact title match.
+- [x] Recover minimal contact cards only for grounded identity, follow-up, or meeting interactions.
+- [x] Turn a stale direct-participant contact update into a confirmable create action without duplicating ambiguous same-name contacts.
+- [x] Preselect newly confirmed contacts, including the user's self contact, in dependent meeting cards.
+- [x] Add single-select local target pickers to contact and meeting update cards.
+- [x] Block unresolved updates at the confirmation boundary instead of failing after execution starts.
+- [x] Replace Demo external IDs in execution results with contact and meeting names.
+- [x] Cover stale IDs, ambiguous names, unresolved meeting targets, participant preselection, and readable results.
+- [x] Run regression checks, browser tests, and the Web production build before publishing.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+```
+
+Commit: `fix(actions): resolve local targets before execution`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

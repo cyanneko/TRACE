@@ -103,6 +103,51 @@ test("meeting update cards persist rescheduled time and every structured meeting
   expect(meeting).not.toHaveProperty("notes");
 });
 
+test("an unresolved meeting update requires a local target before execution", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/v1/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { actionScope?: string };
+    const response = await route.fetch();
+    if (body.actionScope !== "meetings") {
+      await route.fulfill({ response });
+      return;
+    }
+    const result = (await response.json()) as {
+      actionCards: Array<{
+        riskFlags: string[];
+        type: string;
+        payload: Record<string, unknown>;
+      }>;
+    };
+    result.actionCards = result.actionCards.map((card) =>
+      card.type === "update_meeting"
+        ? {
+            ...card,
+            riskFlags: [...card.riskFlags, "meeting_not_found"],
+            payload: { ...card.payload, meetingId: null },
+          }
+        : card,
+    );
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/?__trace_fixture=update-meeting");
+  await uploadScreenshot(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
+
+  await expect(page.getByText("Choose a saved meeting", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+  await expect(page.getByText("Choose the saved meeting this update should change before confirmation.")).toBeVisible();
+  await page.getByLabel("Select 与 Maya 的设计评审 as update target").click();
+  await expect(page.getByText("Editing 与 Maya 的设计评审", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+
+  await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
+  await expect(page.getByText("与 Maya 的设计评审", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("A matched local entity is required");
+});
+
 test("confirmed actions persist memory and inform the next thread", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -630,17 +675,14 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
         payload: Record<string, unknown>;
       }>;
     };
-    const participantContactIds = body.contacts
-      .filter((contact) => contact.displayName === "Kai" || contact.displayName === "Lina HR")
-      .map((contact) => contact.id);
     result.actionCards = result.actionCards.map((card) =>
       card.type === "create_meeting"
         ? {
             ...card,
             payload: {
               ...card.payload,
-              participantContactIds,
-              participantNames: [],
+              participantContactIds: [],
+              participantNames: ["Me", "Lina HR"],
             },
           }
         : card,
@@ -718,6 +760,9 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
   expect(reviewWidths.body).toBe(reviewWidths.viewport);
   await page.getByRole("button", { name: "Confirm meetings" }).click();
   await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kai", { exact: true })).toBeVisible();
+  await expect(page.getByText("Lina HR", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("demo-contact-");
 
   const linked = await page.evaluate(() => {
     const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {

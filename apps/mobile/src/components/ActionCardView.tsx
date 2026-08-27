@@ -267,6 +267,103 @@ function withMeetingChange(
   return { ...card, payload: { ...card.payload, changes } };
 }
 
+type TargetOption = {
+  id: string;
+  label: string;
+  meta: string;
+};
+
+function UpdateTargetPicker({
+  accessibilityLabel,
+  emptyLabel,
+  label,
+  onSelect,
+  options,
+  selectedId,
+}: {
+  accessibilityLabel: string;
+  emptyLabel: string;
+  label: string;
+  onSelect: (id: string | null) => void;
+  options: TargetOption[];
+  selectedId: string | null;
+}) {
+  const [open, setOpen] = useState(!selectedId);
+  const selected = options.find((option) => option.id === selectedId);
+
+  return (
+    <View style={styles.participantField}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((current) => !current)}
+        style={({ pressed }) => [
+          styles.participantPickerHeader,
+          !selected && styles.targetPickerMissing,
+          pressed && styles.participantPressed,
+        ]}
+      >
+        <View style={styles.participantSummaryCopy}>
+          <Text numberOfLines={1} style={styles.participantSummary}>
+            {selected?.label ?? emptyLabel}
+          </Text>
+          <Text numberOfLines={1} style={styles.participantCount}>
+            {selected?.meta ?? "Required before this update can run"}
+          </Text>
+        </View>
+        <ChevronDown
+          color={selected ? colors.blue : colors.danger}
+          size={19}
+          strokeWidth={2.1}
+          style={open ? styles.participantChevronOpen : undefined}
+        />
+      </Pressable>
+
+      {open ? (
+        <View style={styles.participantPicker}>
+          <ScrollView nestedScrollEnabled style={styles.participantPickerList}>
+            {options.map((option) => {
+              const checked = option.id === selectedId;
+              return (
+                <Pressable
+                  accessibilityLabel={`${checked ? "Remove" : "Select"} ${option.label} as update target`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked }}
+                  aria-checked={checked}
+                  key={option.id}
+                  onPress={() => onSelect(checked ? null : option.id)}
+                  style={({ pressed }) => [styles.participantOption, pressed && styles.participantPressed]}
+                >
+                  <View style={styles.participantOptionCopy}>
+                    <Text numberOfLines={1} style={styles.participantOptionName}>{option.label}</Text>
+                    <Text numberOfLines={1} style={styles.participantOptionMeta}>{option.meta}</Text>
+                  </View>
+                  <View style={[styles.participantCheckbox, checked && styles.participantCheckboxSelected]}>
+                    {checked ? <Check color="#FFFFFF" size={14} strokeWidth={2.5} /> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
+            {options.length === 0 ? (
+              <Text style={styles.participantPickerEmpty}>No saved targets are available.</Text>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function resolvedTargetRisks(riskFlags: string[], selected: boolean, entity: "contact" | "meeting") {
+  const targetRisks = new Set([
+    `${entity}_not_found`,
+    `${entity}_target_required`,
+  ]);
+  const remaining = riskFlags.filter((risk) => !targetRisks.has(risk));
+  return selected ? remaining : [...remaining, `${entity}_target_required`];
+}
+
 function UpdateContactFields({
   card,
   contacts,
@@ -330,11 +427,42 @@ function UpdateContactFields({
     };
     onChange(withContactChange(card, change, nextValue === previousValue));
   };
+  const contactOptions = contacts
+    .filter((contact) => Boolean(contact.displayName))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName))
+    .map((contact) => ({
+      id: contact.id,
+      label: contact.displayName,
+      meta: contact.isSelf
+        ? "You"
+        : [contact.company, contact.jobTitle].filter(Boolean).join(" · ") || "Contact",
+    }));
 
   return (
     <View style={styles.fields}>
+      <UpdateTargetPicker
+        accessibilityLabel="Choose the contact to update"
+        emptyLabel="Choose a saved contact"
+        label="Contact to update"
+        onSelect={(contactId) => {
+          const contact = contacts.find((candidate) => candidate.id === contactId);
+          onChange({
+            ...card,
+            riskFlags: resolvedTargetRisks(card.riskFlags, Boolean(contact), "contact"),
+            payload: {
+              ...card.payload,
+              contactId: contact?.id ?? null,
+              displayName: contact?.displayName ?? card.payload.displayName,
+            },
+          });
+        }}
+        options={contactOptions}
+        selectedId={existing?.id ?? null}
+      />
       <View style={styles.editorStatus}>
-        <Text numberOfLines={1} style={styles.editorTarget}>Editing {card.payload.displayName}</Text>
+        <Text numberOfLines={1} style={styles.editorTarget}>
+          {existing ? `Editing ${existing.displayName}` : "Choose a contact above"}
+        </Text>
         <Text style={styles.editorChangeCount}>{card.payload.changes.length} changed</Text>
       </View>
       <Field label="Name" onChangeText={(value) => updateText("displayName", previousDisplayName, value)} value={displayName} />
@@ -488,11 +616,42 @@ function UpdateMeetingFields({
     }
     onChange(nextCard);
   };
+  const meetingOptions = meetings
+    .filter((meeting) => Boolean(meeting.title))
+    .sort((left, right) => left.title.localeCompare(right.title))
+    .map((meeting) => ({
+      id: meeting.id,
+      label: meeting.title,
+      meta: meeting.startAt
+        ? new Date(meeting.startAt).toLocaleString()
+        : "Time not set",
+    }));
 
   return (
     <View style={styles.fields}>
+      <UpdateTargetPicker
+        accessibilityLabel="Choose the meeting to update"
+        emptyLabel="Choose a saved meeting"
+        label="Meeting to update"
+        onSelect={(meetingId) => {
+          const meeting = meetings.find((candidate) => candidate.id === meetingId);
+          onChange({
+            ...card,
+            riskFlags: resolvedTargetRisks(card.riskFlags, Boolean(meeting), "meeting"),
+            payload: {
+              ...card.payload,
+              meetingId: meeting?.id ?? null,
+              displayTitle: meeting?.title ?? card.payload.displayTitle,
+            },
+          });
+        }}
+        options={meetingOptions}
+        selectedId={existing?.id ?? null}
+      />
       <View style={styles.editorStatus}>
-        <Text numberOfLines={1} style={styles.editorTarget}>Editing {card.payload.displayTitle}</Text>
+        <Text numberOfLines={1} style={styles.editorTarget}>
+          {existing ? `Editing ${existing.title}` : "Choose a meeting above"}
+        </Text>
         <Text style={styles.editorChangeCount}>{card.payload.changes.length} changed</Text>
       </View>
       <Field label="Title" onChangeText={(value) => updateText("title", previousTitle, value)} value={title} />
@@ -592,7 +751,15 @@ function MeetingParticipantsField({
   const canonicalContactIds = contactIds.map((id) => contactById.get(id)?.id ?? id);
   const contactIdsByAlias = new Map<string, Set<string>>();
   for (const contact of uniqueContacts) {
-    const aliases = [normalizeParticipantName(contact.displayName)];
+    const displayParts = contact.displayName.split(/\s+/).filter(Boolean);
+    const aliases = [
+      contact.displayName,
+      contact.givenName ?? "",
+      contact.familyName ?? "",
+      `${contact.givenName ?? ""} ${contact.familyName ?? ""}`,
+      `${contact.familyName ?? ""}${contact.givenName ?? ""}`,
+      ...displayParts,
+    ].map(normalizeParticipantName).filter(Boolean);
     if (contact.isSelf) {
       aliases.push(...selfAliases);
     }
@@ -900,6 +1067,9 @@ const styles = StyleSheet.create({
     minHeight: 54,
     paddingHorizontal: 11,
     paddingVertical: 8,
+  },
+  targetPickerMissing: {
+    borderColor: colors.danger,
   },
   participantSummaryCopy: {
     flex: 1,

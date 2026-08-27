@@ -1,4 +1,4 @@
-import { USER_NOTE_EVIDENCE_ID, type AnalyzeResult } from "@trace/contracts";
+import { USER_NOTE_EVIDENCE_ID, type ActionCard, type AnalyzeResult } from "@trace/contracts";
 import * as Clipboard from "expo-clipboard";
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import type { ExecutionState } from "../execution/reducer";
 import { colors } from "../theme";
 
 type Props = {
+  actions: ActionCard[];
   analysis: AnalyzeResult;
   execution: ExecutionState;
   executionMode: "demo" | "native";
@@ -41,7 +42,16 @@ function actionLabel(type: string): string {
   return "Contact update";
 }
 
+function actionEntityName(action: ActionCard): string {
+  if (action.type === "create_contact" || action.type === "update_contact") {
+    return action.payload.displayName;
+  }
+  if (action.type === "create_meeting") return action.payload.title;
+  return action.payload.displayTitle;
+}
+
 export function ResultScreen({
+  actions,
   analysis,
   execution,
   executionMode,
@@ -67,8 +77,8 @@ export function ResultScreen({
     [analysis.thread.evidence, note],
   );
   const actionById = useMemo(
-    () => new Map(analysis.actionCards.map((action) => [action.id, action])),
-    [analysis.actionCards],
+    () => new Map(actions.map((action) => [action.id, action])),
+    [actions],
   );
   async function copyMessage(index: number, message: string) {
     await Clipboard.setStringAsync(message);
@@ -123,9 +133,9 @@ export function ResultScreen({
                     <Icon color={result.success ? colors.primary : colors.danger} size={18} strokeWidth={2} />
                   </View>
                   <View style={styles.resultCopy}>
-                    <Text style={styles.resultTitle}>{action ? actionLabel(action.type) : result.actionId}</Text>
+                    <Text style={styles.resultTitle}>{action ? actionEntityName(action) : result.actionId}</Text>
                     <Text numberOfLines={1} style={styles.resultMeta}>
-                      {result.success ? result.externalId ?? "Completed" : result.error ?? "Failed"}
+                      {result.success && action ? actionLabel(action.type) : result.error ?? "Completed"}
                     </Text>
                   </View>
                   <View style={[styles.status, !result.success && styles.statusFailed]}>

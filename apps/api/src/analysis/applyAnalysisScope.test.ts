@@ -112,18 +112,24 @@ describe("applyAnalysisScope", () => {
     expect(action.riskFlags).toContain("contact_not_found");
   });
 
-  it("clears deleted update targets and their explicit memory proposals", () => {
+  it("turns a stale direct-participant update into a confirmable new contact", () => {
     const contactOutput = getAnalyzeFixture("update-contact");
     const reconciledContact = applyAnalysisScope(request("contacts"), contactOutput);
     const contactAction = reconciledContact.actionCards[0]!;
 
     expect(reconciledContact.thread.participants[0]).not.toHaveProperty("contactId");
-    expect(contactAction.type).toBe("update_contact");
-    if (contactAction.type !== "update_contact") throw new Error("Expected update_contact action.");
-    expect(contactAction.payload.contactId).toBeNull();
-    expect(contactAction.riskFlags).toContain("contact_not_found");
+    expect(contactAction.type).toBe("create_contact");
+    if (contactAction.type !== "create_contact") throw new Error("Expected create_contact action.");
+    expect(contactAction.payload).toMatchObject({
+      displayName: "Maya Chen",
+      company: "Northstar",
+      jobTitle: "Head of Product",
+    });
+    expect(contactAction.riskFlags).toContain("previous_contact_missing");
     expect(contactAction.memoryProposals).toEqual([]);
+  });
 
+  it("keeps an unmatched meeting update unresolved for explicit user selection", () => {
     const meetingOutput = getAnalyzeFixture("update-meeting");
     const reconciledMeeting = applyAnalysisScope(request("meetings"), meetingOutput);
     const meetingAction = reconciledMeeting.actionCards[0]!;
@@ -157,5 +163,95 @@ describe("applyAnalysisScope", () => {
     expect(action.payload.contactId).toBe("local-maya");
     expect(action.riskFlags).not.toContain("contact_not_found");
     expect(action.memoryProposals[0]?.target).toEqual({ type: "contact", contactId: "local-maya" });
+  });
+
+  it("keeps a same-name ambiguous contact update unresolved", () => {
+    const input = request("contacts");
+    input.contacts = ["one", "two"].map((suffix) => ({
+      id: `local-maya-${suffix}`,
+      displayName: "Maya Chen",
+      company: "",
+      jobTitle: "",
+      phones: [],
+      emails: [],
+    }));
+
+    const reconciled = applyAnalysisScope(input, getAnalyzeFixture("update-contact"));
+    const action = reconciled.actionCards[0]!;
+
+    expect(action.type).toBe("update_contact");
+    if (action.type !== "update_contact") throw new Error("Expected update_contact action.");
+    expect(action.payload.contactId).toBeNull();
+    expect(action.riskFlags).toContain("contact_not_found");
+  });
+
+  it("matches a meeting update by one exact local title when the model id is stale", () => {
+    const input = request("meetings");
+    input.meetings = [
+      {
+        id: "local-design-review",
+        title: "与 Maya 的设计评审",
+        startAt: "2026-08-27T07:00:00.000Z",
+        endAt: "2026-08-27T07:30:00.000Z",
+        timezone: "Asia/Shanghai",
+        allDay: false,
+        location: "",
+        meetingLink: "",
+        participantContactIds: [],
+      },
+    ];
+
+    const reconciled = applyAnalysisScope(input, getAnalyzeFixture("update-meeting"));
+    const action = reconciled.actionCards[0]!;
+
+    expect(action.type).toBe("update_meeting");
+    if (action.type !== "update_meeting") throw new Error("Expected update_meeting action.");
+    expect(action.payload.meetingId).toBe("local-design-review");
+    expect(action.riskFlags).not.toContain("meeting_not_found");
+  });
+
+  it("preselects uniquely named saved contacts for a proposed meeting", () => {
+    const input = request("meetings");
+    input.contacts = [
+      {
+        id: "local-maya",
+        displayName: "Maya Chen",
+        givenName: "Maya",
+        familyName: "Chen",
+        company: "Atelier",
+        jobTitle: "Designer",
+        phones: [],
+        emails: [],
+      },
+    ];
+    const output = getAnalyzeFixture("meeting");
+    const meeting = output.actionCards[0]!;
+    if (meeting.type !== "create_meeting") throw new Error("Expected create_meeting fixture.");
+    meeting.payload.participantContactIds = ["deleted-contact"];
+    meeting.payload.participantNames = ["Maya"];
+
+    const reconciled = applyAnalysisScope(input, output);
+    const action = reconciled.actionCards[0]!;
+
+    expect(reconciled.thread.participants[0]?.contactId).toBe("local-maya");
+    expect(action.type).toBe("create_meeting");
+    if (action.type !== "create_meeting") throw new Error("Expected create_meeting action.");
+    expect(action.payload.participantContactIds).toEqual(["local-maya"]);
+    expect(action.riskFlags).not.toContain("contact_not_found");
+  });
+
+  it("recovers a minimal contact card when the model omits a direct participant", () => {
+    const output = getAnalyzeFixture("contact-meeting");
+    output.actionCards = output.actionCards.filter((action) => action.type !== "create_contact");
+
+    const recovered = applyAnalysisScope(request("contacts"), output);
+
+    expect(recovered.actionCards).toContainEqual(
+      expect.objectContaining({
+        type: "create_contact",
+        evidenceRefs: ["evidence-linqiao-intro", "evidence-linqiao-meeting"],
+        payload: expect.objectContaining({ displayName: "林乔", isSelf: false }),
+      }),
+    );
   });
 });
