@@ -9,7 +9,6 @@ import {
 } from "@trace/contracts";
 import {
   AlertCircle,
-  ArrowLeft,
   Check,
   ChevronDown,
   Eye,
@@ -38,7 +37,6 @@ type ProviderChoice = "server" | RemoteProviderChoice;
 
 type Props = {
   initialSettings: UserVisionProvider | null;
-  onClose: () => void;
   onSave: (settings: UserVisionProvider | null) => Promise<void>;
   serverProvider: ProviderInfo | null;
   storage: ProviderSettingsStorage;
@@ -64,7 +62,7 @@ function presetFor(choice: ProviderChoice) {
     : undefined;
 }
 
-export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serverProvider, storage }: Props) {
+export function ProviderSettingsScreen({ initialSettings, onSave, serverProvider, storage }: Props) {
   const savedChoice = initialSettings?.provider === "fixture" ? "server" : initialSettings?.provider;
   const initialPreset = savedChoice ? presetFor(savedChoice) : undefined;
   const [choice, setChoice] = useState<ProviderChoice>(savedChoice ?? "server");
@@ -142,9 +140,6 @@ export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serve
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <View style={styles.header}>
-          <Pressable accessibilityLabel="Close provider settings" hitSlop={8} onPress={onClose} style={styles.iconButton}>
-            <ArrowLeft color={colors.text} size={21} strokeWidth={2} />
-          </Pressable>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>SETTINGS</Text>
             <Text style={styles.title}>Vision provider</Text>
@@ -401,16 +396,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 12,
-  },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 6,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
   },
   headerCopy: {
     flex: 1,

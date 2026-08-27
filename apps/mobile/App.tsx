@@ -990,7 +990,6 @@ export default function App() {
         {settingsOpen ? (
           <ProviderSettingsScreen
             initialSettings={userVisionProvider}
-            onClose={() => setSettingsOpen(false)}
             onSave={saveProviderSettings}
             serverProvider={serverProvider}
             storage={providerSettingsStorage}
