@@ -1,4 +1,4 @@
-import type { AnalyzeRequest } from "@trace/contracts";
+import type { AnalyzeRequest, InsightRequest } from "@trace/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { VisionProviderConfig } from "../config.js";
@@ -30,6 +30,24 @@ const config: VisionProviderConfig = {
   model: "deepseek-v4-flash-vision-exp",
   thinking: "disabled",
 };
+
+function insightInput(): InsightRequest {
+  const fixture = getAnalyzeFixture("meeting");
+  const action = fixture.actionCards[0]!;
+  return {
+    sourceRunId: "10000000-0000-4000-8000-000000000001",
+    screenshotDataUrl: input.screenshotDataUrl,
+    note: "The user prefers a concise follow-up.",
+    thread: fixture.thread,
+    confirmedActions: [action],
+    toolResults: [{ actionId: action.id, success: true, provider: "demo" }],
+    entityMemories: [],
+    contacts: [],
+    meetings: [],
+    timezone: "Asia/Shanghai",
+    currentTime: "2026-08-26T03:30:00.000Z",
+  };
+}
 
 function completionResponse(content: string, finishReason = "stop") {
   return new Response(
@@ -92,6 +110,52 @@ describe("OpenAICompatibleVisionProvider", () => {
     });
 
     expect(requestBody.messages?.[1]?.content?.map((part) => part.type)).toEqual(["text"]);
+  });
+
+  it("sends the original image and full context for model-generated insights", async () => {
+    const insight = insightInput();
+    const evidenceId = insight.thread.evidence[0]!.id;
+    let requestBody: {
+      messages?: Array<{ content?: string | Array<{ type?: string; text?: string }> }>;
+    } = {};
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as typeof requestBody;
+      return completionResponse(
+        JSON.stringify({
+          insights: [
+            {
+              title: "Keep the follow-up concise",
+              body: "The current thread supports a short written follow-up.",
+              importance: "medium",
+              evidenceRefs: [evidenceId],
+              memoryRefs: [],
+            },
+          ],
+          unresolvedQuestions: [],
+          globalMemoryOperations: [
+            {
+              type: "create",
+              content: "Prefer concise written follow-ups.",
+              evidenceRefs: [evidenceId],
+              confidence: 0.9,
+            },
+          ],
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await new OpenAICompatibleVisionProvider(config).generateInsights(insight);
+    const userContent = requestBody.messages?.[1]?.content;
+
+    expect(Array.isArray(userContent) ? userContent.map((part) => part.type) : []).toEqual([
+      "text",
+      "image_url",
+    ]);
+    expect(Array.isArray(userContent) ? userContent[0]?.text : "").toContain(
+      "The user prefers a concise follow-up",
+    );
+    expect(result.globalMemoryOperations[0]?.type).toBe("create");
   });
 
   it("reports output truncated at the model token limit without a repair request", async () => {

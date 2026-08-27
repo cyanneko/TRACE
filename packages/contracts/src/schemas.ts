@@ -26,7 +26,6 @@ export const ThreadContextSchema = z.object({
 
 export const MemoryProposalTargetSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("action_entity") }),
-  z.object({ type: z.literal("global") }),
   z.object({ type: z.literal("contact"), contactId: NonEmptyStringSchema }),
   z.object({ type: z.literal("meeting"), meetingId: NonEmptyStringSchema }),
 ]);
@@ -307,7 +306,7 @@ export const EntityMemorySchema = z.object({
   ownerId: z.uuid(),
   content: NonEmptyStringSchema,
   status: z.enum(["active", "deleted"]),
-  source: z.enum(["action", "manual", "migration"]),
+  source: z.enum(["action", "insight", "manual", "migration"]),
   sourceRunId: z.uuid().optional(),
   sourceActionId: z.string().trim().optional(),
   sourceEvidenceRefs: z.array(z.string()),
@@ -329,13 +328,14 @@ export const FixtureIdSchema = z.enum([
 
 export const AnalysisScopeSchema = z.enum(["all", "contacts", "meetings"]);
 
+const ScreenshotDataUrlSchema = z
+  .string()
+  .max(12 * 1024 * 1024)
+  .regex(/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/=\r\n]+$/);
+
 export const AnalyzeRequestSchema = z
   .object({
-    screenshotDataUrl: z
-      .string()
-      .max(12 * 1024 * 1024)
-      .regex(/^data:image\/(jpeg|png|gif|webp);base64,[A-Za-z0-9+/=\r\n]+$/)
-      .optional(),
+    screenshotDataUrl: ScreenshotDataUrlSchema.optional(),
     note: z.string().trim().max(2_000).default(""),
     contacts: z.array(ContactSummarySchema).max(200).default([]),
     memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
@@ -407,21 +407,48 @@ export const InsightSchema = z.object({
   suggestedMessage: z.string().optional(),
 });
 
+export const GlobalMemoryOperationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("create"),
+    content: z.string().trim().min(1).max(2_000),
+    evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+    confidence: ConfidenceSchema,
+  }),
+  z.object({
+    type: z.literal("update"),
+    memoryId: z.uuid(),
+    content: z.string().trim().min(1).max(2_000),
+    evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+    confidence: ConfidenceSchema,
+  }),
+  z.object({
+    type: z.literal("delete"),
+    memoryId: z.uuid(),
+    evidenceRefs: z.array(NonEmptyStringSchema).min(1),
+    confidence: ConfidenceSchema,
+  }),
+]);
+
 export const InsightBundleSchema = z.object({
   insights: z.array(InsightSchema).max(3),
   unresolvedQuestions: z.array(NonEmptyStringSchema),
+  globalMemoryOperations: z.array(GlobalMemoryOperationSchema).max(5).default([]),
 });
 
 export const InsightRequestSchema = z
   .object({
     sourceRunId: z.uuid(),
+    screenshotDataUrl: ScreenshotDataUrlSchema.optional(),
+    note: z.string().trim().max(2_000).default(""),
     thread: ThreadContextSchema,
     confirmedActions: z.array(ActionCardSchema),
     toolResults: z.array(ToolResultSchema),
-    memories: z.array(MemoryEntrySchema).max(100),
+    entityMemories: z.array(EntityMemorySchema).max(300).default([]),
     contacts: z.array(ContactSummarySchema).max(200).default([]),
+    meetings: z.array(MeetingSummarySchema).max(200).default([]),
     timezone: z.string().trim().min(1).max(100),
     currentTime: z.iso.datetime(),
+    visionProvider: UserVisionProviderSchema.optional(),
   })
   .superRefine((input, context) => {
     const confirmedIds = new Set(input.confirmedActions.map((action) => action.id));
@@ -475,6 +502,7 @@ export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type ActionExecutionRecord = z.infer<typeof ActionExecutionRecordSchema>;
 export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
 export type Insight = z.infer<typeof InsightSchema>;
+export type GlobalMemoryOperation = z.infer<typeof GlobalMemoryOperationSchema>;
 export type InsightBundle = z.infer<typeof InsightBundleSchema>;
 export type InsightRequest = z.infer<typeof InsightRequestSchema>;
 export type InsightResult = z.infer<typeof InsightResultSchema>;

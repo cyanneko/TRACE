@@ -3,12 +3,13 @@ import type {
   ContactRecord,
   ContactSummary,
   EntityMemory,
+  GlobalMemoryOperation,
   MeetingRecord,
   MeetingSummary,
   ToolResult,
 } from "@trace/contracts";
 
-import type { EntityCommitRecord } from "./storageModel";
+import type { EntityCommitRecord, GlobalMemoryCommitRecord } from "./storageModel";
 
 export type EntityOwner = Pick<EntityMemory, "ownerId" | "ownerType">;
 
@@ -26,6 +27,11 @@ export type CommitSuccessfulActionInput = {
   action: ActionCard;
   result: ToolResult & { success: true };
   timezone: string;
+};
+
+export type ApplyGlobalMemoryOperationsInput = {
+  sourceRunId: string;
+  operations: GlobalMemoryOperation[];
 };
 
 export interface EntityRepository {
@@ -50,6 +56,7 @@ export interface EntityRepository {
   addMemory(input: ManualMemoryInput): Promise<EntityMemory>;
   updateMemory(memoryId: string, patch: Pick<ManualMemoryInput, "content">): Promise<EntityMemory>;
   deleteMemory(memoryId: string): Promise<void>;
+  applyGlobalMemoryOperations(input: ApplyGlobalMemoryOperationsInput): Promise<GlobalMemoryCommitRecord>;
 
   commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord>;
 }

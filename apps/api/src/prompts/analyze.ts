@@ -51,7 +51,7 @@ export function buildAnalyzePrompt(input: AnalyzeRequest): string {
     "Meeting participantContactIds must come from supplied contacts. Keep unmatched participants in participantNames. Contact actions for those people belong only to the contacts pass; never emit them during the meetings pass.",
     "For update_meeting, put pending names in payload.participantNames. Preserve known IDs in a participantContactIds change; TRACE resolves pending names only after their contact actions succeed.",
     "memoryProposals are optional and must contain durable, evidence-backed information worth remembering. Do not classify memories or duplicate basic fields such as names, phone numbers, job titles, meeting titles, or meeting times as free memory.",
-    "Use target type action_entity for memory belonging to a newly created or updated primary entity. Use target type global only for durable user-wide information that applies across contacts and meetings. Use explicit contact or meeting targets only when the ID is supplied in context.",
+    "Use target type action_entity for memory belonging to a newly created or updated primary entity. Use explicit contact or meeting targets only when the ID is supplied in context. Never propose Global Memory here; TRACE consolidates it only after all confirmed contact and meeting actions finish.",
     `CONTEXT JSON:\n${JSON.stringify(context)}`,
     `OUTPUT JSON SCHEMA:\n${JSON.stringify(outputSchema)}`,
   ].join("\n\n");

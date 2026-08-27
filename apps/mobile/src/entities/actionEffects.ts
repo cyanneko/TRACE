@@ -9,7 +9,7 @@ import {
 } from "@trace/contracts";
 
 import type { EntityFactoryOptions } from "./model";
-import { GLOBAL_MEMORY_OWNER, type CommitSuccessfulActionInput } from "./types";
+import type { CommitSuccessfulActionInput } from "./types";
 
 export type ActionEntityEffects = {
   contact?: ContactRecord;
@@ -279,9 +279,7 @@ export function deriveActionEntityEffects(
   let skippedMemoryProposals = 0;
   for (const proposal of proposals) {
     let owner: Pick<EntityMemory, "ownerId" | "ownerType"> | undefined;
-    if (proposal.target.type === "global") {
-      owner = GLOBAL_MEMORY_OWNER;
-    } else if (proposal.target.type === "action_entity") {
+    if (proposal.target.type === "action_entity") {
       owner = { ownerType: entityRef.type, ownerId: entityRef.id };
     } else if (proposal.target.type === "contact") {
       const target = findContact(contacts, proposal.target.contactId);

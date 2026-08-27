@@ -619,6 +619,33 @@ npx expo export --platform ios
 
 Commit: `feat(memory): add category-free global memory`
 
+## Iteration 25 - Model Insights and Global Memory Consolidation
+
+Status: completed
+
+- [x] Preserve Iteration 24 as `iteration-24-global-memory-edge-navigation` before editing.
+- [x] Stop action-card analysis from proposing or writing Global Memory before contact and meeting execution finishes.
+- [x] Generate live insights with the same configured DeepSeek, GLM, Doubao, or custom OpenAI-compatible Provider.
+- [x] Send the original screenshot or description, additional context, extracted thread, confirmed actions, tool results, current contacts and meetings, and all active Global, Contact, and Meeting Memory to the Insight pass.
+- [x] Let the Insight model return evidence-backed create, update, and delete operations for Global Memory only.
+- [x] Reject unknown evidence, unknown memory references, and attempts to modify Contact or Meeting Memory, with one structured repair pass.
+- [x] Apply Global Memory operations atomically and idempotently in browser localStorage and iOS SQLite.
+- [x] Keep direct user editing for all three memory scopes and show the applied Global Memory change count on the result screen.
+- [x] Preserve Iteration 24 local data by defaulting the new Global Memory commit metadata during parsing.
+- [x] Cover full-context Insight input, cross-Provider image handling, output repair, local operation safety, and the end-to-end automatic write.
+- [x] Run all regression checks, Web build, iOS export, and mobile visual verification before publishing.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(insights): consolidate global memory after execution`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

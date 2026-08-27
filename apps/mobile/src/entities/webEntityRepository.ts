@@ -13,6 +13,7 @@ import {
 
 import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
 import { deriveActionEntityEffects } from "./actionEffects";
+import { deriveGlobalMemoryEffects } from "./globalMemoryEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
   applyManualMemoryUpdate,
@@ -24,11 +25,14 @@ import {
 import {
   EntityCommitRecordSchema,
   EntityStoreSchema,
+  GlobalMemoryCommitRecordSchema,
   type EntityCommitRecord,
   type EntityStore,
+  type GlobalMemoryCommitRecord,
 } from "./storageModel";
 import {
   GLOBAL_MEMORY_OWNER,
+  type ApplyGlobalMemoryOperationsInput,
   type CommitSuccessfulActionInput,
   type EntityOwner,
   type EntityRepository,
@@ -258,6 +262,36 @@ export class WebEntityRepository implements EntityRepository {
       updatedAt: this.factory.now(),
     });
     this.write(store);
+  }
+
+  async applyGlobalMemoryOperations(
+    input: ApplyGlobalMemoryOperationsInput,
+  ): Promise<GlobalMemoryCommitRecord> {
+    const store = this.read();
+    const idempotencyKey = `global-memory:${input.sourceRunId}`;
+    const existing = store.globalMemoryCommits.find(
+      (record) => record.idempotencyKey === idempotencyKey,
+    );
+    if (existing) return existing;
+
+    const effects = deriveGlobalMemoryEffects(store.memories, input, this.factory);
+    for (const memory of effects.changedMemories) {
+      const index = store.memories.findIndex((candidate) => candidate.id === memory.id);
+      if (index >= 0) store.memories[index] = memory;
+      else store.memories.push(memory);
+    }
+    const record = GlobalMemoryCommitRecordSchema.parse({
+      idempotencyKey,
+      sourceRunId: input.sourceRunId,
+      createdMemoryIds: effects.createdMemoryIds,
+      updatedMemoryIds: effects.updatedMemoryIds,
+      deletedMemoryIds: effects.deletedMemoryIds,
+      skippedOperations: effects.skippedOperations,
+      committedAt: this.factory.now(),
+    });
+    store.globalMemoryCommits.push(record);
+    this.write(store);
+    return record;
   }
 
   async commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord> {

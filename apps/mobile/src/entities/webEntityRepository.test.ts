@@ -84,6 +84,99 @@ describe("WebEntityRepository", () => {
     await expect(entities.listMemories(GLOBAL_MEMORY_OWNER)).resolves.toEqual([created]);
   });
 
+  it("applies insight-created global memory changes atomically and exactly once", async () => {
+    const store = memoryStore();
+    const entities = repository(store);
+    const existingGlobal = await entities.addMemory({
+      ...GLOBAL_MEMORY_OWNER,
+      content: "Prefer long meeting summaries.",
+    });
+    const removableGlobal = await entities.addMemory({
+      ...GLOBAL_MEMORY_OWNER,
+      content: "Always schedule meetings in the morning.",
+    });
+    const contact = await entities.createContactDraft();
+    const contactMemory = await entities.addMemory({
+      ownerType: "contact",
+      ownerId: contact.id,
+      content: "Maya owns the design review.",
+    });
+    const input = {
+      sourceRunId: "20000000-0000-4000-8000-000000000020",
+      operations: [
+        {
+          type: "update" as const,
+          memoryId: existingGlobal.id,
+          content: "Prefer concise meeting summaries.",
+          evidenceRefs: ["evidence-summary-style"],
+          confidence: 0.96,
+        },
+        {
+          type: "delete" as const,
+          memoryId: contactMemory.id,
+          evidenceRefs: ["evidence-summary-style"],
+          confidence: 1,
+        },
+        {
+          type: "delete" as const,
+          memoryId: removableGlobal.id,
+          evidenceRefs: ["evidence-schedule-change"],
+          confidence: 0.98,
+        },
+        {
+          type: "create" as const,
+          content: "Use written follow-ups after important conversations.",
+          evidenceRefs: ["evidence-written-follow-up"],
+          confidence: 0.9,
+        },
+      ],
+    };
+
+    const first = await entities.applyGlobalMemoryOperations(input);
+    const second = await entities.applyGlobalMemoryOperations(input);
+    const globalMemories = await entities.listMemories(GLOBAL_MEMORY_OWNER);
+    const contactMemories = await entities.listMemories({ ownerType: "contact", ownerId: contact.id });
+    const persisted = JSON.parse(store.getItem(ENTITY_STORAGE_KEY) ?? "{}") as {
+      globalMemoryCommits?: unknown[];
+    };
+
+    expect(second).toEqual(first);
+    expect(first).toMatchObject({
+      createdMemoryIds: [expect.any(String)],
+      updatedMemoryIds: [existingGlobal.id],
+      deletedMemoryIds: [removableGlobal.id],
+      skippedOperations: 1,
+    });
+    expect(globalMemories.map((memory) => memory.content)).toEqual([
+      "Prefer concise meeting summaries.",
+      "Use written follow-ups after important conversations.",
+    ]);
+    expect(globalMemories.every((memory) => memory.source === "insight")).toBe(true);
+    expect(contactMemories).toEqual([contactMemory]);
+    expect(persisted.globalMemoryCommits).toHaveLength(1);
+  });
+
+  it("opens an Iteration 24 entity store before adding insight commit metadata", async () => {
+    const store = memoryStore({
+      [ENTITY_STORAGE_KEY]: JSON.stringify({
+        version: 2,
+        contacts: [],
+        meetings: [],
+        memories: [],
+        entityCommits: [],
+      }),
+    });
+    const entities = repository(store);
+
+    await expect(entities.listAllMemories()).resolves.toEqual([]);
+    await expect(
+      entities.applyGlobalMemoryOperations({
+        sourceRunId: "20000000-0000-4000-8000-000000000021",
+        operations: [],
+      }),
+    ).resolves.toMatchObject({ skippedOperations: 0 });
+  });
+
   it("migrates legacy contact and meeting memory without deleting v1 data", async () => {
     const legacy: MemoryEntry[] = [
       {
@@ -164,11 +257,6 @@ describe("WebEntityRepository", () => {
           content: "Send the deck before the review.",
           evidenceRefs: ["evidence-review"],
         },
-        {
-          target: { type: "global" },
-          content: "Keep design reviews concise.",
-          evidenceRefs: ["evidence-review"],
-        },
       ],
       payload: {
         title: "Design review",
@@ -196,14 +284,11 @@ describe("WebEntityRepository", () => {
     const second = await entities.commitSuccessfulAction(input);
     const meetings = await entities.listMeetings();
     const memories = await entities.listMemories({ ownerType: "meeting", ownerId: first.entityRef.id });
-    const globalMemories = await entities.listMemories(GLOBAL_MEMORY_OWNER);
 
     expect(second).toEqual(first);
     expect(meetings).toHaveLength(1);
     expect(memories).toHaveLength(1);
     expect(memories[0]?.content).toBe("Send the deck before the review.");
-    expect(globalMemories).toHaveLength(1);
-    expect(globalMemories[0]?.content).toBe("Keep design reviews concise.");
   });
 
   it("keeps only the latest action-created contact marked as self", async () => {

@@ -218,6 +218,99 @@ test("global memory and settings use compact edge navigation", async ({ page }) 
   expect(widths.body).toBe(widths.viewport);
 });
 
+test("insights receive the full thread and all memory scopes before updating global memory", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let insightRequest: {
+    screenshotDataUrl?: string;
+    note?: string;
+    thread?: { summary?: string; evidence?: Array<{ id: string }> };
+    confirmedActions?: Array<{ id: string }>;
+    toolResults?: Array<{ actionId: string; success: boolean }>;
+    entityMemories?: Array<{ ownerType: string }>;
+    contacts?: unknown[];
+    meetings?: unknown[];
+  } | null = null;
+  await page.route("**/v1/insights", async (route) => {
+    insightRequest = route.request().postDataJSON() as typeof insightRequest;
+    const response = await route.fetch();
+    const result = (await response.json()) as {
+      globalMemoryOperations: unknown[];
+    };
+    const evidenceId = insightRequest?.thread?.evidence?.[0]?.id;
+    result.globalMemoryOperations = [
+      {
+        type: "create",
+        content: "Prefer concise follow-ups after important conversations.",
+        evidenceRefs: [evidenceId],
+        confidence: 0.94,
+      },
+    ];
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/?__trace_fixture=meeting");
+  await page.getByRole("tab", { name: "Global memory" }).click();
+  await page.getByLabel("Add memory").click();
+  await page.getByPlaceholder("Memory").fill("Prefer concise summaries across threads.");
+  await page.getByLabel("Save memory").click();
+
+  await page.getByRole("tab", { name: "Contacts" }).click();
+  await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
+  await page.getByLabel("Open Maya Chen").click();
+  await page.getByLabel("Add memory").click();
+  await page.getByPlaceholder("Memory").fill("Maya expects the deck before a review.");
+  await page.getByLabel("Save memory").click();
+
+  await page.getByRole("tab", { name: "Analyze" }).click();
+  await uploadScreenshot(page);
+  await page.getByPlaceholder("Anything the screenshot leaves out?").fill(
+    "The recommendation should consider the full design-review context.",
+  );
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
+  await page.getByRole("button", { name: "Confirm meetings" }).click();
+
+  await expect(page.getByText("Global memory updated", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 automatic change applied", { exact: true })).toBeVisible();
+  expect(insightRequest).not.toBeNull();
+  expect(insightRequest?.screenshotDataUrl).toMatch(/^data:image\//);
+  expect(insightRequest?.note).toBe(
+    "The recommendation should consider the full design-review context.",
+  );
+  expect(insightRequest?.thread?.summary).toContain("Maya");
+  expect(insightRequest?.confirmedActions).toHaveLength(1);
+  expect(insightRequest?.toolResults).toEqual([
+    expect.objectContaining({ success: true }),
+  ]);
+  expect(new Set(insightRequest?.entityMemories?.map((memory) => memory.ownerType))).toEqual(
+    new Set(["global", "contact", "meeting"]),
+  );
+  expect(insightRequest?.contacts?.length).toBeGreaterThan(0);
+  expect(insightRequest?.meetings?.length).toBeGreaterThan(0);
+
+  await page.getByRole("tab", { name: "Global memory" }).click();
+  await expect(
+    page.getByText("Prefer concise follow-ups after important conversations.", { exact: true }),
+  ).toBeVisible();
+  const persisted = await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      globalMemoryCommits?: unknown[];
+      memories?: Array<{ content: string; ownerType: string; source: string }>;
+    };
+    return {
+      commits: state.globalMemoryCommits?.length ?? 0,
+      generated: state.memories?.find(
+        (memory) =>
+          memory.ownerType === "global" &&
+          memory.content === "Prefer concise follow-ups after important conversations.",
+      ),
+    };
+  });
+  expect(persisted.commits).toBe(1);
+  expect(persisted.generated?.source).toBe("insight");
+});
+
 test("a selected screenshot can be removed without discarding its description", async ({ page }) => {
   await page.goto("/");
   await uploadScreenshot(page);

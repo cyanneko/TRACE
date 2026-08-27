@@ -421,22 +421,42 @@ export default function App() {
     currentAnalysis: AnalyzeResult,
     confirmedActions: ActionCard[],
     results: ToolResult[],
-    activeMemories: MemoryEntry[],
     currentContacts: ContactSummary[] = analysisContacts,
   ) {
     try {
+      const [currentEntityMemories, localContacts, localMeetings] = await Promise.all([
+        entityRepository.listAllMemories(),
+        entityRepository.listContacts(),
+        entityRepository.listMeetings(),
+      ]);
       const insightResult = await generateInsights({
         sourceRunId: currentAnalysis.runId,
+        screenshotDataUrl: screenshot?.dataUrl,
+        note,
         thread: currentAnalysis.thread,
         confirmedActions,
         toolResults: results,
-        memories: activeMemories,
-        contacts: currentContacts,
+        entityMemories: currentEntityMemories,
+        contacts: mergeContactContext(currentContacts, localContacts),
+        meetings: mergeMeetingContext([], localMeetings),
         timezone: timezone(),
         currentTime: new Date().toISOString(),
+        visionProvider: currentAnalysis.provider.fixture ? undefined : userVisionProvider ?? undefined,
       });
+      const memoryCommit = await entityRepository.applyGlobalMemoryOperations({
+        sourceRunId: currentAnalysis.runId,
+        operations: insightResult.globalMemoryOperations,
+      });
+      await refreshEntities();
       updateApiHealth();
-      dispatchExecution({ type: "INSIGHTS_READY", insights: insightResult });
+      dispatchExecution({
+        type: "INSIGHTS_READY",
+        insights: insightResult,
+        globalMemoryChangeCount:
+          memoryCommit.createdMemoryIds.length +
+          memoryCommit.updatedMemoryIds.length +
+          memoryCommit.deletedMemoryIds.length,
+      });
     } catch (insightError) {
       updateApiHealth(insightError);
       throw insightError;
@@ -469,7 +489,7 @@ export default function App() {
     setPhase("result");
 
     try {
-      await requestInsights(currentAnalysis, confirmedActions, results, currentMemories, currentContacts);
+      await requestInsights(currentAnalysis, confirmedActions, results, currentContacts);
     } catch (insightError) {
       dispatchExecution({
         type: "FAILED",
@@ -685,7 +705,7 @@ export default function App() {
     );
     dispatchExecution({ type: "INSIGHTS_START" });
     try {
-      await requestInsights(analysis, confirmedActions, execution.results, execution.activeMemories);
+      await requestInsights(analysis, confirmedActions, execution.results);
     } catch (insightError) {
       dispatchExecution({
         type: "FAILED",

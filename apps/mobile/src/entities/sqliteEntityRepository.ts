@@ -14,6 +14,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import { getTraceDatabase } from "../native/traceDatabase";
 import { deriveActionEntityEffects } from "./actionEffects";
+import { deriveGlobalMemoryEffects } from "./globalMemoryEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
   applyManualMemoryUpdate,
@@ -22,9 +23,15 @@ import {
   createMeetingDraft,
   entityFactoryOptions,
 } from "./model";
-import { EntityCommitRecordSchema, type EntityCommitRecord } from "./storageModel";
+import {
+  EntityCommitRecordSchema,
+  GlobalMemoryCommitRecordSchema,
+  type EntityCommitRecord,
+  type GlobalMemoryCommitRecord,
+} from "./storageModel";
 import {
   GLOBAL_MEMORY_OWNER,
+  type ApplyGlobalMemoryOperationsInput,
   type CommitSuccessfulActionInput,
   type EntityOwner,
   type EntityRepository,
@@ -290,6 +297,44 @@ export class SqliteEntityRepository implements EntityRepository {
     }
     const existing = EntityMemorySchema.parse(JSON.parse(row.payload));
     await this.writeMemory(database, { ...existing, status: "deleted", updatedAt: this.factory.now() });
+  }
+
+  async applyGlobalMemoryOperations(
+    input: ApplyGlobalMemoryOperationsInput,
+  ): Promise<GlobalMemoryCommitRecord> {
+    const database = await this.database();
+    const idempotencyKey = `global-memory:${input.sourceRunId}`;
+    const existingRow = await database.getFirstAsync<PayloadRow>(
+      "SELECT payload FROM entity_action_commits WHERE idempotency_key = ?",
+      idempotencyKey,
+    );
+    if (existingRow) {
+      return GlobalMemoryCommitRecordSchema.parse(JSON.parse(existingRow.payload));
+    }
+
+    const memories = await this.listAllEntityMemories(database);
+    const effects = deriveGlobalMemoryEffects(memories, input, this.factory);
+    const record = GlobalMemoryCommitRecordSchema.parse({
+      idempotencyKey,
+      sourceRunId: input.sourceRunId,
+      createdMemoryIds: effects.createdMemoryIds,
+      updatedMemoryIds: effects.updatedMemoryIds,
+      deletedMemoryIds: effects.deletedMemoryIds,
+      skippedOperations: effects.skippedOperations,
+      committedAt: this.factory.now(),
+    });
+
+    await database.withExclusiveTransactionAsync(async (transaction) => {
+      for (const memory of effects.changedMemories) await this.writeMemory(transaction, memory);
+      await transaction.runAsync(
+        `INSERT INTO entity_action_commits (idempotency_key, payload, committed_at)
+         VALUES (?, ?, ?)`,
+        record.idempotencyKey,
+        JSON.stringify(record),
+        record.committedAt,
+      );
+    });
+    return record;
   }
 
   async commitSuccessfulAction(input: CommitSuccessfulActionInput): Promise<EntityCommitRecord> {

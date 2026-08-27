@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { getAnalyzeFixture } from "../fixtures/analyzeFixtures.js";
 import { FixtureProvider } from "../providers/fixtureProvider.js";
+import type { ModelProvider } from "../providers/modelProvider.js";
 import { buildServer } from "../server.js";
 
 const sourceRunId = "2f887426-3d1f-4b68-a6bc-58e975ac35fb";
 const memoryId = "8b9b25de-8616-45f5-b9fd-baa09ae8f6dc";
 const localContactId = "3b6995b7-4bdc-4709-a54d-70795403213e";
+const localMeetingId = "4b6995b7-4bdc-4709-a54d-70795403213e";
 const priorRunId = "f5475249-3e9e-4c90-b11a-2c38d43e71da";
 const servers: ReturnType<typeof buildServer>[] = [];
 
@@ -26,6 +28,7 @@ function meetingRequest(): InsightRequest {
   const action = fixture.actionCards[0]!;
   return {
     sourceRunId,
+    note: "The deck should stay concise.",
     thread: fixture.thread,
     confirmedActions: [action],
     toolResults: [
@@ -36,14 +39,14 @@ function meetingRequest(): InsightRequest {
         externalId: "demo-event-1",
       },
     ],
-    memories: [
+    entityMemories: [
       {
         id: memoryId,
-        contactId: "contact-maya",
-        type: "open_loop" as const,
-        key: "meeting:2026-08-27T07:00:00.000Z:与 Maya 的设计评审",
-        value: { title: "与 Maya 的设计评审" },
+        ownerType: "meeting" as const,
+        ownerId: localMeetingId,
+        content: "Send the deck before the design review.",
         status: "active" as const,
+        source: "action" as const,
         sourceRunId,
         sourceActionId: action.id,
         sourceEvidenceRefs: action.evidenceRefs,
@@ -53,6 +56,7 @@ function meetingRequest(): InsightRequest {
       },
     ],
     contacts: [],
+    meetings: [],
     timezone: "Asia/Shanghai",
     currentTime: "2026-08-26T03:30:00.000Z",
   };
@@ -71,7 +75,7 @@ describe("POST /v1/insights", () => {
       sourceRunId,
       provider: {
         fixture: true,
-        id: "trace-policy",
+        id: "fixture",
       },
       insights: [
         {
@@ -107,6 +111,7 @@ describe("POST /v1/insights", () => {
     const action = fixture.actionCards[0]!;
     const payload: InsightRequest = {
       sourceRunId,
+      note: "Maya's new role changes the next conversation.",
       thread: fixture.thread,
       confirmedActions: [action],
       toolResults: [
@@ -122,14 +127,14 @@ describe("POST /v1/insights", () => {
           },
         },
       ],
-      memories: [
+      entityMemories: [
         {
           id: memoryId,
-          contactId: localContactId,
-          type: "open_loop",
-          key: "meeting:design-review",
-          value: { title: "与 Maya 的设计评审" },
+          ownerType: "contact",
+          ownerId: localContactId,
+          content: "Maya owns the design review follow-up.",
           status: "active",
+          source: "action",
           sourceRunId: priorRunId,
           sourceActionId: "action-create-meeting",
           sourceEvidenceRefs: ["evidence-meeting-time"],
@@ -139,6 +144,7 @@ describe("POST /v1/insights", () => {
         },
       ],
       contacts: [],
+      meetings: [],
       timezone: "Asia/Shanghai",
       currentTime: "2026-08-26T03:30:00.000Z",
     };
@@ -172,5 +178,31 @@ describe("POST /v1/insights", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("INVALID_INSIGHT_REQUEST");
+  });
+
+  it("uses the user-selected Provider for insights without returning its credentials", async () => {
+    const unavailable = new Error("The default Provider must not be used.");
+    const provider: ModelProvider = {
+      info: { fixture: false, id: "unavailable", model: "unavailable" },
+      analyze: async () => Promise.reject(unavailable),
+      generateInsights: async () => Promise.reject(unavailable),
+    };
+    const server = buildServer({ provider });
+    servers.push(server);
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/insights",
+      payload: {
+        ...meetingRequest(),
+        visionProvider: {
+          provider: "fixture",
+          apiKey: "must-not-leak",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().provider).toMatchObject({ fixture: true, id: "fixture" });
+    expect(response.body).not.toContain("must-not-leak");
   });
 });

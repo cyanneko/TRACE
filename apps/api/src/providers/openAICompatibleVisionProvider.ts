@@ -1,11 +1,12 @@
-import type { AnalyzeRequest } from "@trace/contracts";
+import type { AnalyzeRequest, InsightRequest } from "@trace/contracts";
 import OpenAI, { APIConnectionTimeoutError } from "openai";
 
 import type { VisionProviderConfig } from "../config.js";
 import { buildAnalyzePrompt, buildRepairPrompt } from "../prompts/analyze.js";
+import { buildInsightsPrompt, buildInsightsRepairPrompt } from "../prompts/insights.js";
 import type { ModelProvider } from "./modelProvider.js";
 import { ModelOutputTruncatedError, ModelProviderTimeoutError } from "./modelProviderErrors.js";
-import { parseAnalyzeOutputWithRepair } from "./parseModelOutput.js";
+import { parseAnalyzeOutputWithRepair, parseInsightOutputWithRepair } from "./parseModelOutput.js";
 
 const defaultCompletionTimeoutMs = 55_000;
 const defaultAnalysisTimeoutMs = 100_000;
@@ -49,13 +50,50 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
   async analyze(input: AnalyzeRequest) {
     const deadline = Date.now() + this.analysisTimeoutMs;
     return parseAnalyzeOutputWithRepair({
-      initial: () => this.complete(input, buildAnalyzePrompt(input), deadline),
+      initial: () =>
+        this.complete(
+          buildAnalyzePrompt(input),
+          deadline,
+          "You are TRACE's perception and planning agent. Return valid JSON and never execute actions.",
+          input.screenshotDataUrl,
+        ),
       repair: (invalidOutput, issues) =>
-        this.complete(input, buildRepairPrompt(input, invalidOutput, issues), deadline),
+        this.complete(
+          buildRepairPrompt(input, invalidOutput, issues),
+          deadline,
+          "You repair TRACE analysis JSON. Return valid JSON and never execute actions.",
+          input.screenshotDataUrl,
+        ),
     });
   }
 
-  private async complete(input: AnalyzeRequest, prompt: string, deadline: number): Promise<string> {
+  async generateInsights(input: InsightRequest) {
+    const deadline = Date.now() + this.analysisTimeoutMs;
+    return parseInsightOutputWithRepair({
+      input,
+      initial: () =>
+        this.complete(
+          buildInsightsPrompt(input),
+          deadline,
+          "You are TRACE's grounded insight and global-memory consolidation agent. Return valid JSON and do not invoke tools.",
+          input.screenshotDataUrl,
+        ),
+      repair: (invalidOutput, issues) =>
+        this.complete(
+          buildInsightsRepairPrompt(input, invalidOutput, issues),
+          deadline,
+          "You repair TRACE insight JSON. Return valid JSON and do not invoke tools.",
+          input.screenshotDataUrl,
+        ),
+    });
+  }
+
+  private async complete(
+    prompt: string,
+    deadline: number,
+    systemPrompt: string,
+    screenshotDataUrl?: string,
+  ): Promise<string> {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
       throw new ModelProviderTimeoutError();
@@ -76,11 +114,11 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
         text: prompt,
       },
     ];
-    if (input.screenshotDataUrl) {
+    if (screenshotDataUrl) {
       const imageUrl =
         this.config.imageFormat === "base64"
-          ? input.screenshotDataUrl.slice(input.screenshotDataUrl.indexOf(",") + 1)
-          : input.screenshotDataUrl;
+          ? screenshotDataUrl.slice(screenshotDataUrl.indexOf(",") + 1)
+          : screenshotDataUrl;
       content.push({
         type: "image_url",
         image_url: {
@@ -95,7 +133,7 @@ export class OpenAICompatibleVisionProvider implements ModelProvider {
       messages: [
         {
           role: "system",
-          content: "You are TRACE's perception and planning agent. Return valid JSON and never execute actions.",
+          content: systemPrompt,
         },
         {
           role: "user",

@@ -330,6 +330,24 @@ describe("InsightBundleSchema", () => {
     });
 
     expect(result.insights[0]?.memoryRefs).toEqual([]);
+    expect(result.globalMemoryOperations).toEqual([]);
+  });
+
+  it("accepts a grounded category-free global memory operation", () => {
+    const result = InsightBundleSchema.safeParse({
+      insights: [],
+      unresolvedQuestions: [],
+      globalMemoryOperations: [
+        {
+          type: "create",
+          content: "Prefer concise summaries across threads.",
+          evidenceRefs: ["evidence-1"],
+          confidence: 0.92,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
   });
 });
 
@@ -345,8 +363,9 @@ describe("InsightRequestSchema", () => {
       },
       confirmedActions: [],
       toolResults: [{ actionId: "not-confirmed", success: true, provider: "demo" }],
-      memories: [],
+      entityMemories: [],
       contacts: [],
+      meetings: [],
       timezone: "Asia/Shanghai",
       currentTime: "2026-08-26T03:30:00.000Z",
     });

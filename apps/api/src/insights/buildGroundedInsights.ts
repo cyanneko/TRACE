@@ -1,4 +1,4 @@
-import type { ActionCard, Insight, InsightBundle, InsightRequest, MemoryEntry } from "@trace/contracts";
+import type { ActionCard, EntityMemory, Insight, InsightBundle, InsightRequest } from "@trace/contracts";
 
 function validEvidenceRefs(input: InsightRequest, action: ActionCard): string[] {
   const available = new Set(input.thread.evidence.map((evidence) => evidence.id));
@@ -40,13 +40,30 @@ function contactIdsForAction(input: InsightRequest, action: ActionCard): string[
   return [...ids];
 }
 
-function memoriesForAction(input: InsightRequest, action: ActionCard): MemoryEntry[] {
+function meetingIdsForAction(input: InsightRequest, action: ActionCard): string[] {
+  const ids = new Set<string>();
+  if (action.type === "update_meeting" && action.payload.meetingId) {
+    ids.add(action.payload.meetingId);
+  }
+  const result = input.toolResults.find(
+    (candidate) => candidate.success && candidate.actionId === action.id,
+  );
+  if (result?.entityRef?.type === "meeting") {
+    ids.add(result.entityRef.id);
+    if (result.entityRef.externalId) ids.add(result.entityRef.externalId);
+  }
+  return [...ids];
+}
+
+function memoriesForAction(input: InsightRequest, action: ActionCard): EntityMemory[] {
   const contactIds = new Set(contactIdsForAction(input, action));
-  return input.memories.filter(
+  const meetingIds = new Set(meetingIdsForAction(input, action));
+  return input.entityMemories.filter(
     (memory) =>
       memory.status === "active" &&
       (memory.sourceActionId === action.id ||
-        (Boolean(memory.contactId) && contactIds.has(memory.contactId!))),
+        (memory.ownerType === "contact" && contactIds.has(memory.ownerId)) ||
+        (memory.ownerType === "meeting" && meetingIds.has(memory.ownerId))),
   );
 }
 
@@ -120,7 +137,7 @@ function actionInsight(input: InsightRequest, action: ActionCard): Insight | nul
 }
 
 function continuityInsight(input: InsightRequest, actions: ActionCard[]): Insight | null {
-  const priorMemories = input.memories.filter(
+  const priorMemories = input.entityMemories.filter(
     (memory) => memory.status === "active" && memory.sourceRunId !== input.sourceRunId,
   );
   const evidenceRef = input.thread.evidence[0]?.id;
@@ -129,8 +146,18 @@ function continuityInsight(input: InsightRequest, actions: ActionCard[]): Insigh
   }
 
   const relevantContactIds = new Set(actions.flatMap((action) => contactIdsForAction(input, action)));
+  const relevantMeetingIds = new Set(actions.flatMap((action) => meetingIdsForAction(input, action)));
+  for (const meeting of input.meetings) {
+    if (meeting.participantContactIds.some((contactId) => relevantContactIds.has(contactId))) {
+      relevantMeetingIds.add(meeting.id);
+      if (meeting.externalEventId) relevantMeetingIds.add(meeting.externalEventId);
+    }
+  }
   const relevant = priorMemories.filter(
-    (memory) => !memory.contactId || relevantContactIds.size === 0 || relevantContactIds.has(memory.contactId),
+    (memory) =>
+      memory.ownerType === "global" ||
+      (memory.ownerType === "contact" && relevantContactIds.has(memory.ownerId)) ||
+      (memory.ownerType === "meeting" && relevantMeetingIds.has(memory.ownerId)),
   );
   if (relevant.length === 0) {
     return null;
@@ -176,5 +203,6 @@ export function buildGroundedInsights(input: InsightRequest): InsightBundle {
   return {
     insights: insights.slice(0, 3),
     unresolvedQuestions,
+    globalMemoryOperations: [],
   };
 }

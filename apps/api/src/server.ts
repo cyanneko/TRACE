@@ -40,7 +40,7 @@ export function buildServer(options: ServerOptions = {}) {
   }));
 
   registerAnalyzeRoute(app, provider, environment);
-  registerInsightsRoute(app);
+  registerInsightsRoute(app, provider, environment);
 
   return app;
 }

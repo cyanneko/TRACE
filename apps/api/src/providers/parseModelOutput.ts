@@ -1,4 +1,10 @@
-import { AnalyzeModelOutputSchema, type AnalyzeModelOutput } from "@trace/contracts";
+import {
+  AnalyzeModelOutputSchema,
+  InsightBundleSchema,
+  type AnalyzeModelOutput,
+  type InsightBundle,
+  type InsightRequest,
+} from "@trace/contracts";
 
 export type ModelValidationIssue = {
   message: string;
@@ -152,6 +158,22 @@ function normalizeModelOutput(value: unknown): unknown {
   return value;
 }
 
+function normalizeInsightOutput(value: unknown): unknown {
+  const output = asRecord(value);
+  if (!output) return value;
+
+  for (const field of ["insights", "unresolvedQuestions", "globalMemoryOperations"] as const) {
+    if (output[field] === null) output[field] = [];
+  }
+  if (Array.isArray(output.insights)) {
+    for (const insightValue of output.insights) {
+      const insight = asRecord(insightValue);
+      if (insight?.memoryRefs === null) insight.memoryRefs = [];
+    }
+  }
+  return output;
+}
+
 function validationIssues(error: { issues: Array<{ message: string; path: PropertyKey[] }> }) {
   return error.issues.slice(0, 12).map((issue) => ({
     message: issue.message,
@@ -181,6 +203,84 @@ function parse(content: string) {
   return { success: false as const, error: lastError, issues };
 }
 
+function insightReferenceIssues(input: InsightRequest, bundle: InsightBundle): ModelValidationIssue[] {
+  const issues: ModelValidationIssue[] = [];
+  const evidenceIds = new Set(input.thread.evidence.map((evidence) => evidence.id));
+  const activeMemories = input.entityMemories.filter((memory) => memory.status === "active");
+  const memoryIds = new Set(activeMemories.map((memory) => memory.id));
+  const globalMemoryIds = new Set(
+    activeMemories
+      .filter((memory) => memory.ownerType === "global")
+      .map((memory) => memory.id),
+  );
+
+  bundle.insights.forEach((insight, insightIndex) => {
+    insight.evidenceRefs.forEach((reference, referenceIndex) => {
+      if (!evidenceIds.has(reference)) {
+        issues.push({
+          message: `Unknown thread evidence ID ${reference}.`,
+          path: `insights.${insightIndex}.evidenceRefs.${referenceIndex}`,
+        });
+      }
+    });
+    insight.memoryRefs.forEach((reference, referenceIndex) => {
+      if (!memoryIds.has(reference)) {
+        issues.push({
+          message: `Unknown active entity memory ID ${reference}.`,
+          path: `insights.${insightIndex}.memoryRefs.${referenceIndex}`,
+        });
+      }
+    });
+  });
+
+  bundle.globalMemoryOperations.forEach((operation, operationIndex) => {
+    operation.evidenceRefs.forEach((reference, referenceIndex) => {
+      if (!evidenceIds.has(reference)) {
+        issues.push({
+          message: `Unknown thread evidence ID ${reference}.`,
+          path: `globalMemoryOperations.${operationIndex}.evidenceRefs.${referenceIndex}`,
+        });
+      }
+    });
+    if (operation.type !== "create" && !globalMemoryIds.has(operation.memoryId)) {
+      issues.push({
+        message: `Memory ${operation.memoryId} is not an active global memory.`,
+        path: `globalMemoryOperations.${operationIndex}.memoryId`,
+      });
+    }
+  });
+
+  return issues.slice(0, 12);
+}
+
+function parseInsight(content: string, input: InsightRequest) {
+  let lastError: unknown = new SyntaxError("Response is not valid JSON.");
+  let issues: ModelValidationIssue[] = [{ message: "Response is not valid JSON.", path: "$" }];
+
+  for (const candidate of jsonObjectCandidates(content)) {
+    let value: unknown;
+    try {
+      value = JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+
+    const parsed = InsightBundleSchema.safeParse(normalizeInsightOutput(value));
+    if (!parsed.success) {
+      lastError = parsed.error;
+      issues = validationIssues(parsed.error);
+      continue;
+    }
+    const referenceIssues = insightReferenceIssues(input, parsed.data);
+    if (referenceIssues.length === 0) return parsed;
+    lastError = new Error("Insight response contains references outside the supplied context.");
+    issues = referenceIssues;
+  }
+
+  return { success: false as const, error: lastError, issues };
+}
+
 type ParseWithRepairInput = {
   initial: () => Promise<string>;
   repair: (invalidOutput: string, issues: ModelValidationIssue[]) => Promise<string>;
@@ -204,6 +304,34 @@ export async function parseAnalyzeOutputWithRepair({
 
   throw new ModelOutputError(
     "Model returned invalid structured output after one repair attempt",
+    repairedParse.issues,
+    { cause: repairedParse.error },
+  );
+}
+
+type ParseInsightWithRepairInput = ParseWithRepairInput & {
+  input: InsightRequest;
+};
+
+export async function parseInsightOutputWithRepair({
+  input,
+  initial,
+  repair,
+}: ParseInsightWithRepairInput): Promise<InsightBundle> {
+  const firstOutput = await initial();
+  const firstParse = parseInsight(firstOutput, input);
+  if (firstParse.success) {
+    return firstParse.data;
+  }
+
+  const repairedOutput = await repair(firstOutput, firstParse.issues);
+  const repairedParse = parseInsight(repairedOutput, input);
+  if (repairedParse.success) {
+    return repairedParse.data;
+  }
+
+  throw new ModelOutputError(
+    "Model returned invalid structured insight output after one repair attempt",
     repairedParse.issues,
     { cause: repairedParse.error },
   );

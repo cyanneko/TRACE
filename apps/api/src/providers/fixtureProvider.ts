@@ -1,6 +1,7 @@
-import type { AnalyzeRequest } from "@trace/contracts";
+import type { AnalyzeRequest, InsightRequest } from "@trace/contracts";
 
 import { getAnalyzeFixture } from "../fixtures/analyzeFixtures.js";
+import { buildGroundedInsights } from "../insights/buildGroundedInsights.js";
 import type { ModelProvider } from "./modelProvider.js";
 
 export class FixtureProvider implements ModelProvider {
@@ -12,5 +13,9 @@ export class FixtureProvider implements ModelProvider {
 
   async analyze(input: AnalyzeRequest) {
     return getAnalyzeFixture(input.fixtureId ?? "meeting");
+  }
+
+  async generateInsights(input: InsightRequest) {
+    return buildGroundedInsights(input);
   }
 }

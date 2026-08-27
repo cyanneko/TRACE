@@ -1,9 +1,11 @@
+import type { InsightRequest } from "@trace/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { getAnalyzeFixture } from "../fixtures/analyzeFixtures.js";
 import {
   ModelOutputError,
   parseAnalyzeOutputWithRepair,
+  parseInsightOutputWithRepair,
   type ModelValidationIssue,
 } from "./parseModelOutput.js";
 
@@ -192,6 +194,141 @@ describe("parseAnalyzeOutputWithRepair", () => {
     expect(repair.mock.calls[0]?.[1]).toContainEqual({
       message: expect.any(String),
       path: "actionCards",
+    });
+  });
+});
+
+const insightGlobalMemoryId = "30000000-0000-4000-8000-000000000001";
+const insightContactMemoryId = "30000000-0000-4000-8000-000000000002";
+
+function insightRequest(): InsightRequest {
+  const fixture = getAnalyzeFixture("meeting");
+  const action = fixture.actionCards[0]!;
+  const timestamps = {
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  };
+  return {
+    sourceRunId: "10000000-0000-4000-8000-000000000001",
+    note: "Keep the output concise.",
+    thread: fixture.thread,
+    confirmedActions: [action],
+    toolResults: [{ actionId: action.id, success: true, provider: "demo" }],
+    entityMemories: [
+      {
+        id: insightGlobalMemoryId,
+        ownerType: "global",
+        ownerId: "00000000-0000-4000-8000-000000000000",
+        content: "Prefer concise summaries.",
+        status: "active",
+        source: "manual",
+        sourceEvidenceRefs: [],
+        confidence: 1,
+        ...timestamps,
+      },
+      {
+        id: insightContactMemoryId,
+        ownerType: "contact",
+        ownerId: "40000000-0000-4000-8000-000000000001",
+        content: "Maya expects the deck before the review.",
+        status: "active",
+        source: "manual",
+        sourceEvidenceRefs: [],
+        confidence: 1,
+        ...timestamps,
+      },
+    ],
+    contacts: [],
+    meetings: [],
+    timezone: "Asia/Shanghai",
+    currentTime: "2026-08-26T03:30:00.000Z",
+  };
+}
+
+describe("parseInsightOutputWithRepair", () => {
+  it("accepts grounded references and category-free global memory operations", async () => {
+    const input = insightRequest();
+    const evidenceId = input.thread.evidence[0]!.id;
+    const repair = vi.fn();
+    const result = await parseInsightOutputWithRepair({
+      input,
+      initial: async () =>
+        JSON.stringify({
+          insights: [
+            {
+              title: "Prepare the concise deck",
+              body: "The meeting memory and current agreement both point to a short pre-read.",
+              importance: "high",
+              evidenceRefs: [evidenceId],
+              memoryRefs: [insightGlobalMemoryId, insightContactMemoryId],
+            },
+          ],
+          unresolvedQuestions: [],
+          globalMemoryOperations: [
+            {
+              type: "update",
+              memoryId: insightGlobalMemoryId,
+              content: "Prefer concise written summaries.",
+              evidenceRefs: [evidenceId],
+              confidence: 0.93,
+            },
+          ],
+        }),
+      repair,
+    });
+
+    expect(result.insights[0]?.memoryRefs).toEqual([
+      insightGlobalMemoryId,
+      insightContactMemoryId,
+    ]);
+    expect(result.globalMemoryOperations[0]).toMatchObject({
+      type: "update",
+      memoryId: insightGlobalMemoryId,
+    });
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it("repairs an attempt to modify contact memory as global memory", async () => {
+    const input = insightRequest();
+    const evidenceId = input.thread.evidence[0]!.id;
+    const repaired = {
+      insights: [],
+      unresolvedQuestions: [],
+      globalMemoryOperations: [
+        {
+          type: "create",
+          content: "Prefer concise written summaries.",
+          evidenceRefs: [evidenceId],
+          confidence: 0.9,
+        },
+      ],
+    };
+    const repair = vi.fn(async (_invalidOutput: string, _issues: ModelValidationIssue[]) =>
+      JSON.stringify(repaired),
+    );
+
+    const result = await parseInsightOutputWithRepair({
+      input,
+      initial: async () =>
+        JSON.stringify({
+          insights: [],
+          unresolvedQuestions: [],
+          globalMemoryOperations: [
+            {
+              type: "delete",
+              memoryId: insightContactMemoryId,
+              evidenceRefs: [evidenceId],
+              confidence: 0.8,
+            },
+          ],
+        }),
+      repair,
+    });
+
+    expect(result.globalMemoryOperations[0]?.type).toBe("create");
+    expect(repair.mock.calls[0]?.[1]).toContainEqual({
+      message: `Memory ${insightContactMemoryId} is not an active global memory.`,
+      path: "globalMemoryOperations.0.memoryId",
     });
   });
 });

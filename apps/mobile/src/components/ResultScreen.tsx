@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Copy,
+  Database,
   Lightbulb,
   MessageSquareText,
   RefreshCw,
@@ -136,7 +137,20 @@ export function ResultScreen({
           {execution.status === "insighting" ? (
             <View style={styles.loadingBand}>
               <Text style={styles.loadingTitle}>Connecting actions, evidence and memory</Text>
-              <Text style={styles.loadingCopy}>The writes are already complete. TRACE is preparing grounded follow-up help.</Text>
+              <Text style={styles.loadingCopy}>The writes are complete. TRACE is preparing grounded help and consolidating global memory.</Text>
+            </View>
+          ) : null}
+
+          {execution.status === "complete" && execution.globalMemoryChangeCount > 0 ? (
+            <View style={styles.memoryUpdate}>
+              <Database color={colors.primary} size={18} strokeWidth={2} />
+              <View style={styles.memoryUpdateCopy}>
+                <Text style={styles.memoryUpdateTitle}>Global memory updated</Text>
+                <Text style={styles.memoryUpdateMeta}>
+                  {execution.globalMemoryChangeCount} automatic change
+                  {execution.globalMemoryChangeCount === 1 ? "" : "s"} applied
+                </Text>
+              </View>
             </View>
           ) : null}
 
@@ -386,6 +400,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
+  },
+  memoryUpdate: {
+    alignItems: "center",
+    backgroundColor: colors.primarySoft,
+    borderRadius: 6,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  memoryUpdateCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  memoryUpdateTitle: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  memoryUpdateMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
   },
   insightList: {
     gap: 12,

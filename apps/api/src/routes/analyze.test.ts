@@ -25,6 +25,7 @@ function createFailingServer(error: Error) {
   const provider: ModelProvider = {
     info: { fixture: false, id: "test-provider", model: "vision-test" },
     analyze: async () => Promise.reject(error),
+    generateInsights: async () => Promise.reject(error),
   };
   const server = buildServer({ provider });
   servers.push(server);

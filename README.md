@@ -30,7 +30,8 @@ The model can propose actions, but it cannot execute them. Only validated cards 
 - A compact Provider dropdown with device-local BYOK settings.
 - Idempotent Web demo actions and native iOS Contacts/Calendar implementations.
 - Inspectable structured memory with active, superseded, and deleted states.
-- Post-confirmation insights, next steps, and suggested messages with grounding references.
+- Model-generated post-confirmation insights, next steps, and suggested messages with grounding references.
+- Automatic, evidence-backed Global Memory consolidation after contact and meeting execution.
 - A two-run flow where memory from one thread informs the next.
 
 ## Repository
@@ -139,9 +140,9 @@ POST /v1/analyze
 POST /v1/insights
 ```
 
-`/v1/analyze` receives a screenshot data URL, optional note, compact contact index, active memory, timezone, current time, and an optional per-request BYOK provider configuration. It never returns the key. It returns thread context, evidence, uncertainty, and up to three proposed actions.
+`/v1/analyze` receives a screenshot data URL, optional note, compact contact and meeting indexes, active memory, timezone, current time, and an optional per-request BYOK provider configuration. It never returns the key. It returns thread context, evidence, uncertainty, and every grounded action in the requested planning stage.
 
-`/v1/insights` is called only after confirmation and execution. It receives confirmed actions, tool results, current evidence, and active memory. Failed actions do not become memory or factual insights.
+`/v1/insights` is called only after contact and meeting confirmation and execution. The selected Provider receives the original screenshot or description, extracted thread context, confirmed actions, actual tool results, current contact and meeting indexes, and active Global, Contact, and Meeting Memory. It returns grounded insights plus conservative Global Memory operations. Failed actions do not become memory or factual insights.
 
 For a standalone local process:
 
@@ -153,14 +154,15 @@ npm run start --workspace @trace/api
 
 ## Memory Policy
 
-TRACE stores structured facts rather than replaying an unlimited chat transcript.
+TRACE stores scoped, structured memory rather than replaying an unlimited chat transcript.
 
-- Only successful confirmed tool results can create memory.
-- Every memory records its source run, action, evidence references, confidence, and timestamps.
-- A new fact with the same contact/type/key supersedes the previous active fact.
-- A semantically identical fact is not duplicated across runs.
-- Delete creates a tombstone; it does not erase the audit trail.
-- Only active memory is sent back as context on later runs.
+- Contact and Meeting Memory changes only after their corresponding confirmed action succeeds.
+- After all contact and meeting actions finish, the Insight Provider may create, update, or delete Global Memory without another confirmation step.
+- Automatic Global Memory operations require current-thread evidence and cannot target Contact or Meeting Memory IDs.
+- Global Memory commits are idempotent per analysis run, and duplicate content is skipped locally.
+- Users can still create, edit, or delete Global, Contact, and Meeting Memory directly.
+- Every memory records its owner, source, evidence references, confidence, and timestamps; delete creates a tombstone.
+- Only active memory from all three scopes is sent back with the current analysis context on later runs.
 - Screenshots are not logged or persisted by the API.
 
 Web uses localStorage for the demo. Native iOS uses `trace.db` through `expo-sqlite` for both memory and action idempotency records.
@@ -230,11 +232,11 @@ Current automated coverage includes provider configuration, model-output repair,
 
 ## Privacy And Security
 
-- Provider keys exist only in the API environment.
+- BYOK Provider keys stay device-local at rest and are sent to the local adapter only for the requested vendor call.
 - Contact context is compacted before inference and capped by the contract.
 - The API does not store screenshots, contacts, or memory.
-- Side effects require a visible confirmation step.
-- Memory can be inspected and deleted in the result UI.
+- Contact and meeting side effects require a visible confirmation step; automatic Global Memory consolidation occurs only afterward.
+- Memory can be inspected and edited from the Global, Contacts, and Meetings areas.
 
 The MVP API has no authentication and permissive development CORS. Do not expose it publicly without adding authentication, rate limiting, origin restrictions, encrypted transport, retention controls, and abuse protection.
 
@@ -248,7 +250,7 @@ The MVP API has no authentication and permissive development CORS. Do not expose
 - The ISO date/time editor is functional but not a production date-picker experience.
 - Contact display-name replacement is conservative and may need locale-aware name handling.
 - Native exactly-once execution has a small crash window between an OS write and recording its local idempotency event.
-- Insights currently use a deterministic grounded policy engine after model perception; richer model-backed ranking is deferred.
+- Fixture tests use deterministic grounded insights; configured DeepSeek, GLM, Doubao, and custom Providers generate live insights.
 - The current flow accepts one screenshot and one device-local user profile.
 
 Planning artifacts remain in [TODO.md](TODO.md), [the 16-hour build draft](docs/16H_MVP_BUILD_DRAFT.md), and [the implementation draft](docs/IMPLEMENTATION_DRAFT.md).

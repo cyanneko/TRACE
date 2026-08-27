@@ -196,6 +196,7 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
     meetings,
     memories: entityMemories,
     entityCommits: [],
+    globalMemoryCommits: [],
     migratedFromV1At: options.migratedAt,
   };
 }
