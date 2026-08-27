@@ -290,7 +290,7 @@ const fixtures = {
     thread: {
       summary: "用户与 Lina HR 确认了面试时间，并提供了自己的姓名用于会议邀请。",
       participants: [
-        { displayName: "Kai", confidence: 0.99 },
+        { displayName: "Kai", confidence: 0.99, isSelf: true },
         { displayName: "Lina HR", confidence: 0.94 },
       ],
       evidence: [

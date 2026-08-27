@@ -134,6 +134,35 @@ describe("POST /v1/analyze", () => {
     ]);
   });
 
+  it("returns contacts and meetings in separate planning passes", async () => {
+    const server = createServer();
+    const input = {
+      ...validPayload,
+      fixtureId: "contact-meeting",
+      note: "林乔希望明天下午三点聊合作。",
+      screenshotDataUrl: undefined,
+    };
+    const contacts = await server.inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: { ...input, actionScope: "contacts" },
+    });
+    const meetings = await server.inject({
+      method: "POST",
+      url: "/v1/analyze",
+      payload: { ...input, actionScope: "meetings" },
+    });
+
+    expect(contacts.statusCode).toBe(200);
+    expect(contacts.json().actionCards.map((card: { type: string }) => card.type)).toEqual([
+      "create_contact",
+    ]);
+    expect(meetings.statusCode).toBe(200);
+    expect(meetings.json().actionCards.map((card: { type: string }) => card.type)).toEqual([
+      "create_meeting",
+    ]);
+  });
+
   it("returns an explicit self contact when the user must join a meeting", async () => {
     const response = await createServer().inject({
       method: "POST",

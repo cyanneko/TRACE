@@ -22,12 +22,30 @@ const analyzeContext = {
 
 describe("AnalyzeRequestSchema", () => {
   it("accepts a description without a screenshot", () => {
-    expect(
-      AnalyzeRequestSchema.safeParse({
-        ...analyzeContext,
-        note: "Maya asked to meet tomorrow at 3 PM.",
-      }).success,
-    ).toBe(true);
+    const result = AnalyzeRequestSchema.safeParse({
+      ...analyzeContext,
+      note: "Maya asked to meet tomorrow at 3 PM.",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.actionScope).toBe("all");
+  });
+
+  it("accepts a prior thread for a meetings-only second pass", () => {
+    const result = AnalyzeRequestSchema.safeParse({
+      ...analyzeContext,
+      actionScope: "meetings",
+      note: "Continue planning from the first pass.",
+      priorThread: {
+        summary: "Kai and Lina agreed to an interview.",
+        participants: [{ displayName: "Kai", confidence: 1, isSelf: true }],
+        evidence: [{ id: "evidence-self", quote: "I am Kai.", speaker: "User" }],
+        uncertainties: [],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.priorThread?.participants[0]?.isSelf).toBe(true);
   });
 
   it("requires at least a screenshot or a description", () => {

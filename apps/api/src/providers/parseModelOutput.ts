@@ -90,6 +90,7 @@ function normalizeModelOutput(value: unknown): unknown {
         if (participant && (participant.contactId === null || participant.contactId === "")) {
           delete participant.contactId;
         }
+        if (participant?.isSelf === null) participant.isSelf = false;
       }
     }
   }

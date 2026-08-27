@@ -13,6 +13,8 @@ async function uploadAndAnalyze(page: Page) {
   await uploadScreenshot(page);
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
+  await expect(page.getByRole("button", { name: "Confirm meetings" })).toBeVisible();
 }
 
 test("confirmed actions persist memory and inform the next thread", async ({ page }) => {
@@ -80,7 +82,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await page.getByText("Contact update", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
-  await page.getByRole("button", { name: "Confirm contacts" }).click();
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
 
   await expect(page.getByText("这条线程延续了之前的上下文")).toBeVisible();
   const secondRun = await page.evaluate(() => {
@@ -124,6 +126,9 @@ test("mobile no-action state stays conservative and within the viewport", async 
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 
+  await expect(page.getByText("No contact action found")).toBeVisible();
+  await expect(page.getByLabel("Feedback for contacts analysis")).toBeVisible();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
   await expect(page.getByText("No grounded action found")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
   const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
@@ -160,7 +165,7 @@ test("description-only analysis confirms contacts before meetings and links part
   await expect(page.getByText("创建联系人林乔", { exact: true })).toBeVisible();
   await expect(page.getByText("创建与林乔的合作沟通", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Confirm contacts and continue" }).click();
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
   await expect(page.getByText("STEP 2 OF 2", { exact: true })).toBeVisible();
   await expect(page.getByText("创建与林乔的合作沟通", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Confirm meetings" }).click();
@@ -187,6 +192,24 @@ test("description-only analysis confirms contacts before meetings and links part
 });
 
 test("self and HR contacts are confirmed before both join the meeting", async ({ page }) => {
+  const passes: Array<{
+    actionScope: string;
+    contacts: Array<{ displayName: string; isSelf?: boolean }>;
+    reviewFeedback: string;
+  }> = [];
+  page.on("request", (request) => {
+    if (request.method() !== "POST" || new URL(request.url()).pathname !== "/v1/analyze") return;
+    const body = request.postDataJSON() as {
+      actionScope: string;
+      contacts: Array<{ displayName: string; isSelf?: boolean }>;
+      reviewFeedback: string;
+    };
+    passes.push({
+      actionScope: body.actionScope,
+      contacts: body.contacts,
+      reviewFeedback: body.reviewFeedback,
+    });
+  });
   await page.goto("/");
   await page
     .getByLabel("Describe the conversation")
@@ -196,10 +219,45 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
 
   await expect(page.getByText("创建我的联系人", { exact: true })).toBeVisible();
   await expect(page.getByLabel("This contact is me: Kai")).toBeChecked();
-  await page.getByRole("button", { name: "Confirm contacts and continue" }).click();
+  await page.getByLabel("Feedback for contacts analysis").fill("Keep Kai as my self contact.");
+  const contactRevision = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/v1/analyze") &&
+      response.request().postDataJSON()?.reviewFeedback === "Keep Kai as my self contact.",
+  );
+  await page.getByRole("button", { name: "Revise contacts" }).click();
+  await contactRevision;
+  await expect(page.getByText("创建我的联系人", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
 
   await expect(page.getByText("创建 HR 面试", { exact: true })).toBeVisible();
   await expect(page.locator('input[value="Me, Lina HR"]')).toBeVisible();
+  expect(passes.slice(0, 3).map((pass) => pass.actionScope)).toEqual([
+    "contacts",
+    "contacts",
+    "meetings",
+  ]);
+  expect(passes[1]?.reviewFeedback).toBe("Keep Kai as my self contact.");
+  expect(passes[2]?.contacts).toContainEqual(expect.objectContaining({ displayName: "Kai", isSelf: true }));
+
+  await page.getByLabel("Feedback for meetings analysis").fill("Keep both attendees in the interview.");
+  const meetingRevision = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/v1/analyze") &&
+      response.request().postDataJSON()?.reviewFeedback === "Keep both attendees in the interview.",
+  );
+  await page.getByRole("button", { name: "Revise meetings" }).click();
+  await meetingRevision;
+  await expect(page.getByText("创建 HR 面试", { exact: true })).toBeVisible();
+  expect(passes.at(-1)).toMatchObject({
+    actionScope: "meetings",
+    reviewFeedback: "Keep both attendees in the interview.",
+  });
+  const reviewWidths = await page.evaluate(() => ({
+    body: document.body.scrollWidth,
+    viewport: window.innerWidth,
+  }));
+  expect(reviewWidths.body).toBe(reviewWidths.viewport);
   await page.getByRole("button", { name: "Confirm meetings" }).click();
   await expect(page.getByText("Execution results", { exact: true })).toBeVisible();
 
@@ -225,6 +283,52 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
   await page.getByLabel("Open 与 Lina HR 的面试").click();
   await expect(page.getByLabel("Open Kai")).toBeVisible();
   await expect(page.getByLabel("Open Lina HR")).toBeVisible();
+});
+
+test("a failed meeting pass keeps confirmed contacts and can be revised", async ({ page }) => {
+  let failNextMeetingPass = true;
+  await page.route("**/v1/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { actionScope?: string };
+    if (body.actionScope === "meetings" && failNextMeetingPass) {
+      failNextMeetingPass = false;
+      await route.abort("connectionrefused");
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/");
+  await page
+    .getByLabel("Describe the conversation")
+    .fill("我叫 Kai。Lina HR 约我明天下午两点面试。");
+  await page.getByText("Me + HR", { exact: true }).click();
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
+
+  await expect(page.getByText("Meeting analysis needs another try", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Confirmed contacts were saved/)).toBeVisible();
+  const contactsAfterFailure = await page.evaluate(() => {
+    const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<{ displayName: string; isSelf: boolean }>;
+    };
+    return entities.contacts?.filter((contact) =>
+      contact.displayName === "Kai" || contact.displayName === "Lina HR"
+    );
+  });
+  expect(contactsAfterFailure).toHaveLength(2);
+  expect(contactsAfterFailure?.find((contact) => contact.displayName === "Kai")?.isSelf).toBe(true);
+
+  await page.getByLabel("Feedback for meetings analysis").fill("Retry with Kai and Lina HR included.");
+  await page.getByRole("button", { name: "Revise meetings" }).click();
+  await expect(page.getByText("创建 HR 面试", { exact: true })).toBeVisible();
+  const contactsAfterRetry = await page.evaluate(() => {
+    const entities = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
+      contacts?: Array<{ displayName: string }>;
+    };
+    return entities.contacts?.filter((contact) =>
+      contact.displayName === "Kai" || contact.displayName === "Lina HR"
+    ).length;
+  });
+  expect(contactsAfterRetry).toBe(2);
 });
 
 test("a successful analysis clears a stale offline health indicator", async ({ page }) => {

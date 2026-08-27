@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 import { buildAnalyzePrompt, buildRepairPrompt } from "./analyze.js";
 
 const input: AnalyzeRequest = {
+  actionScope: "all",
   screenshotDataUrl:
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   note: "",
+  reviewFeedback: "",
   contacts: [],
   memories: [],
   meetings: [
@@ -61,6 +63,27 @@ describe("buildAnalyzePrompt", () => {
 
     expect(prompt).toContain("Design review");
     expect(prompt).toContain("Send the deck before the review");
+  });
+
+  it("focuses the first pass on contacts and the second pass on confirmed meeting participants", () => {
+    const contactPrompt = buildAnalyzePrompt({ ...input, actionScope: "contacts" });
+    const meetingPrompt = buildAnalyzePrompt({ ...input, actionScope: "meetings" });
+
+    expect(contactPrompt).toContain("CONTACT PASS 1");
+    expect(contactPrompt).toContain("Every directly interacting unmatched participant, including the user");
+    expect(meetingPrompt).toContain("MEETING PASS 2");
+    expect(meetingPrompt).toContain("supplied contacts are the confirmed result of pass 1");
+  });
+
+  it("keeps stage feedback as guidance rather than conversation evidence", () => {
+    const prompt = buildAnalyzePrompt({
+      ...input,
+      actionScope: "contacts",
+      reviewFeedback: "The green speaker is me; use the name from my introduction.",
+    });
+
+    expect(prompt).toContain("The green speaker is me");
+    expect(prompt).toContain("Treat feedback as explicit user clarification");
   });
 
   it("tells the repair pass which schema path failed", () => {

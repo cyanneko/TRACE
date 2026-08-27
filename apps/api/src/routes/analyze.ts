@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AnalyzeRequestSchema, AnalyzeResultSchema } from "@trace/contracts";
 import type { FastifyInstance } from "fastify";
 
+import { applyAnalysisScope } from "../analysis/applyAnalysisScope.js";
 import type { ModelProvider } from "../providers/modelProvider.js";
 import type { Environment } from "../config.js";
 import { createUserModelProvider } from "../providers/createProvider.js";
@@ -25,7 +26,7 @@ export function registerAnalyzeRoute(app: FastifyInstance, provider: ModelProvid
     try {
       const { visionProvider, ...analyzeInput } = parsedInput.data;
       const requestProvider = visionProvider ? createUserModelProvider(visionProvider, environment) : provider;
-      const output = await requestProvider.analyze(analyzeInput);
+      const output = applyAnalysisScope(analyzeInput, await requestProvider.analyze(analyzeInput));
       return AnalyzeResultSchema.parse({
         ...output,
         provider: requestProvider.info,

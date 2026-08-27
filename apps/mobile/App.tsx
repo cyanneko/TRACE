@@ -1,6 +1,7 @@
 import {
   ActionCardSchema,
   type ActionCard,
+  type AnalysisScope,
   type AnalyzeResult,
   type ContactRecord,
   type ContactSummary,
@@ -9,6 +10,7 @@ import {
   type MemoryEntry,
   type MeetingRecord,
   type ProviderInfo,
+  type ThreadContext,
   type ToolResult,
   type UserVisionProvider,
 } from "@trace/contracts";
@@ -41,6 +43,7 @@ import {
 } from "react-native";
 
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
+import { mergeSequentialAnalysis } from "./src/analysis/sequentialPlanning";
 import { ActionCardView } from "./src/components/ActionCardView";
 import { BottomNavigation, type MainTab } from "./src/components/BottomNavigation";
 import { ContactsScreen } from "./src/components/ContactsScreen";
@@ -108,6 +111,12 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reviewStage, setReviewStage] = useState<ReviewStage>("meetings");
   const [executingStage, setExecutingStage] = useState(false);
+  const [planningMeetings, setPlanningMeetings] = useState(false);
+  const [retryingStage, setRetryingStage] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState<Record<ReviewStage, string>>({
+    contacts: "",
+    meetings: "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeMemories, setActiveMemories] = useState<MemoryEntry[]>([]);
@@ -121,6 +130,7 @@ export default function App() {
   const [execution, dispatchExecution] = useReducer(executionReducer, initialExecutionState);
   const stagedActionsRef = useRef<ActionCard[]>([]);
   const stagedResultsRef = useRef<ToolResult[]>([]);
+  const contactAnalysisRef = useRef<AnalyzeResult | null>(null);
   const platformServices = useMemo(() => createPlatformServices(), []);
   const providerSettingsRepository = useMemo(() => createProviderSettingsRepository(), []);
   const fixtureContactSource = useMemo(() => new DemoContactSource(), []);
@@ -290,6 +300,58 @@ export default function App() {
     }
   }
 
+  async function runAnalysisPass(
+    actionScope: AnalysisScope,
+    priorThread?: ThreadContext,
+    feedback = "",
+  ) {
+    const currentTime = new Date().toISOString();
+    const useFixture = provider?.fixture ?? true;
+    const [memories, sourceContacts, sourceMeetings] = await Promise.all([
+      memoryRepository.listActive(),
+      useFixture ? fixtureContactSource.list() : platformServices.contacts.list(),
+      (useFixture ? fixtureMeetingSource : platformServices.meetings).list(currentTime),
+    ]);
+    const entitySource = useFixture
+      ? "demo"
+      : platformServices.capabilities.contacts === "native"
+        ? "ios"
+        : "demo";
+    await entityRepository.syncContacts(sourceContacts, entitySource);
+    await entityRepository.syncMeetings(sourceMeetings, entitySource);
+    const [localContacts, localMeetings, currentEntityMemories] = await Promise.all([
+      entityRepository.listContacts(),
+      entityRepository.listMeetings(),
+      entityRepository.listAllMemories(),
+    ]);
+    const contacts = mergeContactContext(sourceContacts, localContacts);
+    const meetings = mergeMeetingContext(sourceMeetings, localMeetings);
+    const result = await analyzeScreenshot({
+      actionScope,
+      contacts,
+      currentTime,
+      entityMemories: currentEntityMemories,
+      fixtureId: useFixture ? fixtureId : undefined,
+      meetings,
+      memories,
+      note,
+      priorThread,
+      reviewFeedback: feedback,
+      screenshotDataUrl: screenshot?.dataUrl,
+      timezone: timezone(),
+      visionProvider: userVisionProvider ?? undefined,
+    });
+    updateApiHealth();
+    return {
+      contacts,
+      currentEntityMemories,
+      localContacts,
+      localMeetings,
+      memories,
+      result,
+    };
+  }
+
   async function analyze() {
     if (!screenshot && !note.trim()) {
       setError("Choose a screenshot or describe the conversation.");
@@ -299,51 +361,20 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
-      const currentTime = new Date().toISOString();
-      const useFixture = provider?.fixture ?? true;
-      const [memories, sourceContacts, sourceMeetings] = await Promise.all([
-        memoryRepository.listActive(),
-        useFixture ? fixtureContactSource.list() : platformServices.contacts.list(),
-        (useFixture ? fixtureMeetingSource : platformServices.meetings).list(currentTime),
-      ]);
-      const entitySource = useFixture
-        ? "demo"
-        : platformServices.capabilities.contacts === "native"
-          ? "ios"
-          : "demo";
-      await entityRepository.syncContacts(sourceContacts, entitySource);
-      await entityRepository.syncMeetings(sourceMeetings, entitySource);
-      const [localContacts, localMeetings, currentEntityMemories] = await Promise.all([
-        entityRepository.listContacts(),
-        entityRepository.listMeetings(),
-        entityRepository.listAllMemories(),
-      ]);
-      const contacts = mergeContactContext(sourceContacts, localContacts);
-      const meetings = mergeMeetingContext(sourceMeetings, localMeetings);
-      const result = await analyzeScreenshot({
-        contacts,
-        currentTime,
-        entityMemories: currentEntityMemories,
-        fixtureId: provider?.fixture === false ? undefined : fixtureId,
-        meetings,
-        memories,
-        note,
-        screenshotDataUrl: screenshot?.dataUrl,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        visionProvider: userVisionProvider ?? undefined,
-      });
-      updateApiHealth();
-      setAnalysis(result);
-      setAnalysisContacts(contacts);
-      setActiveMemories(memories);
-      setEntityContacts(localContacts);
-      setEntityMeetings(localMeetings);
-      setEntityMemories(currentEntityMemories);
-      setProvider(result.provider);
-      const orderedCards = orderActionsForExecution(result.actionCards);
-      setCards(orderedCards);
-      setSelectedIds(new Set(orderedCards.map((card) => card.id)));
-      setReviewStage(orderedCards.some(isContactAction) ? "contacts" : "meetings");
+      const contactPass = await runAnalysisPass("contacts");
+      contactAnalysisRef.current = contactPass.result;
+      const contactCards = orderActionsForExecution(contactPass.result.actionCards).filter(isContactAction);
+      setAnalysis(contactPass.result);
+      setAnalysisContacts(contactPass.contacts);
+      setActiveMemories(contactPass.memories);
+      setEntityContacts(contactPass.localContacts);
+      setEntityMeetings(contactPass.localMeetings);
+      setEntityMemories(contactPass.currentEntityMemories);
+      setProvider(contactPass.result.provider);
+      setCards(contactCards);
+      setSelectedIds(new Set(contactCards.map((card) => card.id)));
+      setReviewStage("contacts");
+      setReviewFeedback({ contacts: "", meetings: "" });
       stagedActionsRef.current = [];
       stagedResultsRef.current = [];
       setPhase("review");
@@ -386,6 +417,7 @@ export default function App() {
     confirmedActions: ActionCard[],
     results: ToolResult[],
     activeMemories: MemoryEntry[],
+    currentContacts: ContactSummary[] = analysisContacts,
   ) {
     try {
       const insightResult = await generateInsights({
@@ -394,7 +426,7 @@ export default function App() {
         confirmedActions,
         toolResults: results,
         memories: activeMemories,
-        contacts: analysisContacts,
+        contacts: currentContacts,
         timezone: timezone(),
         currentTime: new Date().toISOString(),
       });
@@ -406,6 +438,91 @@ export default function App() {
     }
   }
 
+  async function finishExecution(
+    currentAnalysis: AnalyzeResult,
+    confirmedActions: ActionCard[],
+    results: ToolResult[],
+    currentContacts: ContactSummary[] = analysisContacts,
+  ) {
+    const now = new Date().toISOString();
+    const candidates = deriveMemoryCandidates({
+      sourceRunId: currentAnalysis.runId,
+      actions: confirmedActions,
+      results,
+      now,
+    });
+    const merged = await memoryRepository.apply(candidates);
+    const currentMemories = merged.entries.filter((memory) => memory.status === "active");
+    dispatchExecution({
+      type: "EXECUTED",
+      results,
+      activeMemories: currentMemories,
+      writtenMemoryIds: merged.writtenMemoryIds,
+      supersededMemoryIds: merged.supersededMemoryIds,
+    });
+    setActiveMemories(currentMemories);
+    setPhase("result");
+
+    try {
+      await requestInsights(currentAnalysis, confirmedActions, results, currentMemories, currentContacts);
+    } catch (insightError) {
+      dispatchExecution({
+        type: "FAILED",
+        error: insightError instanceof Error ? insightError.message : "Insight generation failed. Please retry.",
+      });
+    }
+  }
+
+  async function planMeetingStage(
+    currentAnalysis: AnalyzeResult,
+    contactCards: ActionCard[],
+    confirmedActions: ActionCard[],
+    results: ToolResult[],
+    finishIfEmpty: boolean,
+    feedback = reviewFeedback.meetings,
+  ): Promise<boolean> {
+    setPlanningMeetings(true);
+    setError(null);
+    try {
+      const contactAnalysis = contactAnalysisRef.current ?? currentAnalysis;
+      const meetingPass = await runAnalysisPass("meetings", contactAnalysis.thread, feedback);
+      const combined = mergeSequentialAnalysis(contactAnalysis, contactCards, meetingPass.result);
+      const orderedCards = orderActionsForExecution(combined.actionCards);
+      const meetingCards = orderedCards.filter(isMeetingAction);
+      setAnalysis(combined);
+      setAnalysisContacts(meetingPass.contacts);
+      setActiveMemories(meetingPass.memories);
+      setEntityContacts(meetingPass.localContacts);
+      setEntityMeetings(meetingPass.localMeetings);
+      setEntityMemories(meetingPass.currentEntityMemories);
+      setProvider(combined.provider);
+      setCards(orderedCards);
+      setSelectedIds((current) => {
+        const contactIds = new Set(contactCards.map((card) => card.id));
+        return new Set([
+          ...[...current].filter((id) => contactIds.has(id)),
+          ...meetingCards.map((card) => card.id),
+        ]);
+      });
+      setReviewStage("meetings");
+      if (meetingCards.length === 0 && finishIfEmpty) {
+        await finishExecution(combined, confirmedActions, results, meetingPass.contacts);
+      }
+      return true;
+    } catch (planningError) {
+      updateApiHealth(planningError);
+      const message = planningError instanceof Error ? planningError.message : "Meeting analysis failed.";
+      setError(
+        confirmedActions.length > 0
+          ? `Confirmed contacts were saved, but TRACE could not plan meetings. ${message}`
+          : `TRACE could not plan meetings. ${message}`,
+      );
+      return false;
+    } finally {
+      setPlanningMeetings(false);
+    }
+  }
+
   async function confirmSelectedActions() {
     if (!analysis) {
       return;
@@ -414,11 +531,8 @@ export default function App() {
     const stageCards = cards.filter(reviewStage === "contacts" ? isContactAction : isMeetingAction);
     const selectedCards = stageCards.filter((card) => selectedIds.has(card.id));
     const validatedCards = selectedCards.map((card) => ActionCardSchema.safeParse(card));
-    const hasSelectedMeeting = cards.some(
-      (card) => isMeetingAction(card) && selectedIds.has(card.id),
-    );
     const canContinueWithoutStageActions =
-      (reviewStage === "contacts" && hasSelectedMeeting) || stagedActionsRef.current.length > 0;
+      reviewStage === "contacts" || stagedActionsRef.current.length > 0;
     if (selectedCards.length === 0 && !canContinueWithoutStageActions) {
       setError("Select at least one action to continue.");
       return;
@@ -430,6 +544,25 @@ export default function App() {
 
     setError(null);
     setExecutingStage(true);
+    if (
+      reviewStage === "meetings" &&
+      selectedCards.length === 0 &&
+      stagedActionsRef.current.length > 0 &&
+      !cards.some(isMeetingAction)
+    ) {
+      try {
+        await planMeetingStage(
+          analysis,
+          cards.filter(isContactAction),
+          stagedActionsRef.current,
+          stagedResultsRef.current,
+          true,
+        );
+      } finally {
+        setExecutingStage(false);
+      }
+      return;
+    }
     if (stagedActionsRef.current.length === 0 && stagedResultsRef.current.length === 0) {
       dispatchExecution({ type: "START" });
     }
@@ -473,49 +606,80 @@ export default function App() {
       stagedResultsRef.current = results;
       await refreshEntities();
 
-      if (reviewStage === "contacts" && cards.some(isMeetingAction)) {
+      if (reviewStage === "contacts") {
         setReviewStage("meetings");
-        if (stageResults.some((result) => !result.success)) {
+        const hasContactFailure = stageResults.some((result) => !result.success);
+        const planned = await planMeetingStage(
+          analysis,
+          cards.filter(isContactAction),
+          confirmedActions,
+          results,
+          confirmedActions.length > 0,
+        );
+        if (planned && hasContactFailure) {
           setError("Some contact actions failed. Dependent meetings will keep those people unlinked.");
         }
         return;
       }
 
-      const now = new Date().toISOString();
-      const candidates = deriveMemoryCandidates({
-        sourceRunId: analysis.runId,
-        actions: confirmedActions,
-        results,
-        now,
-      });
-      const merged = await memoryRepository.apply(candidates);
-      const activeMemories = merged.entries.filter((memory) => memory.status === "active");
-      dispatchExecution({
-        type: "EXECUTED",
-        results,
-        activeMemories,
-        writtenMemoryIds: merged.writtenMemoryIds,
-        supersededMemoryIds: merged.supersededMemoryIds,
-      });
-      setActiveMemories(activeMemories);
-      setPhase("result");
-
-      try {
-        await requestInsights(analysis, confirmedActions, results, activeMemories);
-      } catch (insightError) {
-        dispatchExecution({
-          type: "FAILED",
-          error: insightError instanceof Error ? insightError.message : "Insight generation failed. Please retry.",
-        });
-      }
+      await finishExecution(analysis, confirmedActions, results);
     } catch (executionError) {
       dispatchExecution({
         type: "FAILED",
         error: executionError instanceof Error ? executionError.message : "The selected actions could not be executed.",
       });
-      setError("The selected actions could not be executed. No new memory was written.");
+      setError(
+        stagedActionsRef.current.length > 0
+          ? "The remaining actions could not be completed. Confirmed contacts remain saved."
+          : "The selected actions could not be executed. No new memory was written.",
+      );
     } finally {
       setExecutingStage(false);
+    }
+  }
+
+  async function retryCurrentStage() {
+    if (!analysis) return;
+    if (reviewStage === "contacts" && stagedActionsRef.current.length > 0) {
+      setError("Contacts are already saved. Add feedback to the meeting stage instead.");
+      return;
+    }
+
+    setRetryingStage(true);
+    setError(null);
+    try {
+      if (reviewStage === "contacts") {
+        const contactPass = await runAnalysisPass("contacts", undefined, reviewFeedback.contacts);
+        contactAnalysisRef.current = contactPass.result;
+        const contactCards = orderActionsForExecution(contactPass.result.actionCards).filter(isContactAction);
+        setAnalysis(contactPass.result);
+        setAnalysisContacts(contactPass.contacts);
+        setActiveMemories(contactPass.memories);
+        setEntityContacts(contactPass.localContacts);
+        setEntityMeetings(contactPass.localMeetings);
+        setEntityMemories(contactPass.currentEntityMemories);
+        setProvider(contactPass.result.provider);
+        setCards(contactCards);
+        setSelectedIds(new Set(contactCards.map((card) => card.id)));
+      } else {
+        await planMeetingStage(
+          analysis,
+          cards.filter(isContactAction),
+          stagedActionsRef.current,
+          stagedResultsRef.current,
+          stagedActionsRef.current.length > 0,
+          reviewFeedback.meetings,
+        );
+      }
+    } catch (retryError) {
+      updateApiHealth(retryError);
+      setError(
+        retryError instanceof TraceApiError
+          ? retryError.message
+          : "TRACE could not revise this stage. Please retry.",
+      );
+    } finally {
+      setRetryingStage(false);
     }
   }
 
@@ -732,8 +896,12 @@ export default function App() {
     setSelectedIds(new Set());
     setReviewStage("meetings");
     setExecutingStage(false);
+    setPlanningMeetings(false);
+    setRetryingStage(false);
+    setReviewFeedback({ contacts: "", meetings: "" });
     stagedActionsRef.current = [];
     stagedResultsRef.current = [];
+    contactAnalysisRef.current = null;
     setError(null);
     dispatchExecution({ type: "RESET" });
     setPhase("capture");
@@ -877,13 +1045,20 @@ export default function App() {
             cards={cards}
             compact={compact}
             error={error}
+            feedback={reviewFeedback[reviewStage]}
             onBack={reset}
             onCardChange={updateCard}
             onCardToggle={toggleCard}
             onConfirm={() => void confirmSelectedActions()}
+            onFeedbackChange={(feedback) =>
+              setReviewFeedback((current) => ({ ...current, [reviewStage]: feedback }))
+            }
+            onRetry={() => void retryCurrentStage()}
             confirming={executingStage}
             confirmedActionCount={stagedActionsRef.current.length}
             executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
+            planningMeetings={planningMeetings}
+            retrying={retryingStage}
             screenshot={screenshot}
             selectedIds={selectedIds}
             stage={reviewStage}
@@ -1089,12 +1264,17 @@ type ReviewProps = {
   compact: boolean;
   confirmedActionCount: number;
   error: string | null;
+  feedback: string;
   executionMode: "demo" | "native";
   confirming: boolean;
   onBack: () => void;
   onCardChange: (card: ActionCard) => void;
   onCardToggle: (id: string) => void;
   onConfirm: () => void;
+  onFeedbackChange: (feedback: string) => void;
+  onRetry: () => void;
+  planningMeetings: boolean;
+  retrying: boolean;
   screenshot: SelectedScreenshot | null;
   selectedIds: Set<string>;
   stage: ReviewStage;
@@ -1107,11 +1287,16 @@ function ReviewScreen({
   confirming,
   confirmedActionCount,
   error,
+  feedback,
   executionMode,
   onBack,
   onCardChange,
   onCardToggle,
   onConfirm,
+  onFeedbackChange,
+  onRetry,
+  planningMeetings,
+  retrying,
   screenshot,
   selectedIds,
   stage,
@@ -1122,25 +1307,24 @@ function ReviewScreen({
   );
   const stageCards = cards.filter(stage === "contacts" ? isContactAction : isMeetingAction);
   const selectedStageCount = stageCards.filter((card) => selectedIds.has(card.id)).length;
-  const selectedMeetingCount = cards.filter(
-    (card) => isMeetingAction(card) && selectedIds.has(card.id),
-  ).length;
   const hasContactStage = cards.some(isContactAction);
-  const hasMeetingStage = cards.some(isMeetingAction);
+  const meetingPlanningRetry =
+    stage === "meetings" && stageCards.length === 0 && confirmedActionCount > 0;
+  const stagedFlow = stage === "contacts" || hasContactStage || confirmedActionCount > 0;
+  const reviewBusy = confirming || retrying;
   const canConfirm =
-    selectedStageCount > 0 ||
-    confirmedActionCount > 0 ||
-    (stage === "contacts" && selectedMeetingCount > 0);
+    stage === "contacts" || selectedStageCount > 0 || confirmedActionCount > 0;
   const confirmLabel =
-    stage === "contacts"
-      ? hasMeetingStage
+    meetingPlanningRetry
+      ? "Retry meeting analysis"
+      : stage === "contacts"
         ? selectedStageCount > 0
-          ? "Confirm contacts and continue"
-          : "Continue without contacts"
-        : "Confirm contacts"
+          ? "Confirm contacts and analyze meetings"
+          : "Analyze meetings without contacts"
       : selectedStageCount > 0
         ? "Confirm meetings"
         : "Finish";
+  const busyLabel = planningMeetings ? "Analyzing meetings" : retrying ? "Reanalyzing" : "Executing";
 
   return (
     <ScrollView contentContainerStyle={styles.reviewScroll} keyboardShouldPersistTaps="handled">
@@ -1179,7 +1363,13 @@ function ReviewScreen({
                   <View key={participant.displayName} style={styles.participant}>
                     <Text style={styles.participantName}>{participant.displayName}</Text>
                     <Text style={styles.participantMatch}>
-                      {participant.contactId ? "Contact matched" : "Not in contacts"}
+                      {participant.isSelf
+                        ? participant.contactId
+                          ? "You · Contact matched"
+                          : "You · Not in contacts"
+                        : participant.contactId
+                          ? "Contact matched"
+                          : "Not in contacts"}
                     </Text>
                   </View>
                 ))}
@@ -1203,14 +1393,14 @@ function ReviewScreen({
         <View style={styles.actionsHeading}>
           <View style={styles.actionsHeadingCopy}>
             <Text style={styles.sectionLabel}>
-              {hasContactStage && hasMeetingStage ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
+              {stagedFlow ? (stage === "contacts" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "PROPOSED ACTIONS"}
             </Text>
             <Text style={styles.actionStageTitle}>{stage === "contacts" ? "Contacts" : "Meetings"}</Text>
             <Text style={styles.actionsCount}>
               {selectedStageCount} of {stageCards.length} selected
             </Text>
-            {stage === "contacts" && hasMeetingStage ? (
-              <Text style={styles.stageHint}>Meetings are confirmed next and can link contacts created here.</Text>
+            {stage === "contacts" ? (
+              <Text style={styles.stageHint}>Confirmed contacts become context for a new meeting analysis.</Text>
             ) : null}
             {stage === "meetings" && hasContactStage ? (
               <Text style={styles.stageHint}>Confirmed contacts are now available to dependent meetings.</Text>
@@ -1239,6 +1429,18 @@ function ReviewScreen({
               />
             ))}
           </View>
+        ) : stage === "contacts" ? (
+          <View style={styles.noActionState}>
+            <ShieldCheck color={colors.primary} size={28} strokeWidth={1.8} />
+            <Text style={styles.noActionTitle}>No contact action found</Text>
+            <Text style={styles.noActionCopy}>Revise this pass or continue to meeting analysis.</Text>
+          </View>
+        ) : meetingPlanningRetry ? (
+          <View style={styles.noActionState}>
+            <RotateCcw color={colors.blue} size={28} strokeWidth={1.8} />
+            <Text style={styles.noActionTitle}>Meeting analysis needs another try</Text>
+            <Text style={styles.noActionCopy}>Confirmed contacts remain saved.</Text>
+          </View>
         ) : (
           <View style={styles.noActionState}>
             <ShieldCheck color={colors.primary} size={28} strokeWidth={1.8} />
@@ -1251,33 +1453,70 @@ function ReviewScreen({
           </View>
         )}
 
+        <View style={styles.reviewFeedback}>
+          <Text style={styles.sectionLabel}>Revision</Text>
+          <TextInput
+            accessibilityLabel={`Feedback for ${stage} analysis`}
+            maxLength={2000}
+            multiline
+            onChangeText={onFeedbackChange}
+            placeholder={`What should TRACE change about the ${stage}?`}
+            placeholderTextColor={colors.textMuted}
+            selectionColor={colors.primary}
+            style={styles.reviewFeedbackInput}
+            value={feedback}
+          />
+          <Pressable
+            accessibilityRole="button"
+            disabled={reviewBusy}
+            onPress={onRetry}
+            style={({ pressed }) => [
+              styles.retryStageButton,
+              pressed && styles.primaryButtonPressed,
+              reviewBusy && styles.primaryButtonDisabled,
+            ]}
+          >
+            {retrying ? (
+              <ActivityIndicator color={colors.blue} size="small" />
+            ) : (
+              <RotateCcw color={colors.blue} size={17} strokeWidth={2} />
+            )}
+            <Text style={styles.retryStageButtonText}>
+              {feedback.trim() ? `Revise ${stage}` : `Retry ${stage}`}
+            </Text>
+          </Pressable>
+        </View>
+
         {error ? <ErrorBanner message={error} /> : null}
 
-        {cards.length > 0 ? (
+        {cards.length > 0 || stage === "contacts" ? (
           <View style={styles.confirmationBoundary}>
             <View style={styles.confirmationCopy}>
               <Text style={styles.confirmationTitle}>Confirmation is the write boundary</Text>
               <Text style={styles.confirmationDetail}>
-                {selectedStageCount} selected {stage === "contacts" ? "contact" : "meeting"} action(s) will be written by the {executionMode === "demo" ? "Demo" : "iOS"} executor.
-                Contacts always run before dependent meetings; unselected cards stay untouched.
+                {meetingPlanningRetry
+                  ? "Confirmed contacts remain saved while TRACE retries only the meeting pass."
+                  : stage === "contacts" && selectedStageCount === 0
+                    ? "No contact writes are selected. TRACE will continue with the meeting pass."
+                  : `${selectedStageCount} selected ${stage === "contacts" ? "contact" : "meeting"} action(s) will be written by the ${executionMode === "demo" ? "Demo" : "iOS"} executor. Unselected cards stay untouched.`}
               </Text>
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={confirming || !canConfirm}
+              disabled={reviewBusy || !canConfirm}
               onPress={onConfirm}
               style={({ pressed }) => [
                 styles.confirmButton,
                 pressed && styles.primaryButtonPressed,
-                (confirming || !canConfirm) && styles.primaryButtonDisabled,
+                (reviewBusy || !canConfirm) && styles.primaryButtonDisabled,
               ]}
             >
-              {confirming ? (
+              {reviewBusy ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <CheckCircle2 color="#FFFFFF" size={18} strokeWidth={2.1} />
               )}
-              <Text style={styles.confirmButtonText}>{confirming ? "Executing" : confirmLabel}</Text>
+              <Text style={styles.confirmButtonText}>{reviewBusy ? busyLabel : confirmLabel}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -1807,6 +2046,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   secondaryButtonText: {
+    color: colors.blue,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  reviewFeedback: {
+    gap: 8,
+  },
+  reviewFeedbackInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    minHeight: 88,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlignVertical: "top",
+  },
+  retryStageButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderColor: colors.blue,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 13,
+  },
+  retryStageButtonText: {
     color: colors.blue,
     fontSize: 13,
     fontWeight: "700",

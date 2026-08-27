@@ -9,9 +9,10 @@ TRACE is an iOS-first agent that turns a chat screenshot into grounded, user-con
 TRACE is not a thin chat-completions screen. It has an explicit loop with separate trust boundaries:
 
 ```text
-Perception       screenshot + note + compact contact/memory context
-Reasoning        evidence, participants, uncertainty, proposed actions
-Confirmation     user edits, selects, or rejects every action
+Contact pass     screenshot + note + compact contact/memory context
+Confirmation     user edits, selects, comments on, or rejects contact actions
+Meeting pass     confirmed contacts become model context for meeting actions
+Confirmation     user edits, selects, comments on, or rejects meeting actions
 Execution        idempotent calendar/contact tools
 Memory policy    successful facts only, with supersede/delete/audit states
 Insight          evidence- and memory-backed help after execution
@@ -22,7 +23,8 @@ The model can propose actions, but it cannot execute them. Only validated cards 
 ## MVP Features
 
 - Screenshot selection and optional context on Web and iOS.
-- Editable action cards for meeting creation, contact creation, and contact updates.
+- Editable action cards for meeting creation/update and contact creation/update.
+- Per-stage written feedback and scoped retries without repeating confirmed writes.
 - Fixture, DeepSeek, GLM, Doubao, and custom OpenAI-compatible vision providers.
 - Deterministic fixture scenarios for all actions plus a conservative no-action case.
 - Idempotent Web demo actions and native iOS Contacts/Calendar implementations.
@@ -81,6 +83,7 @@ TRACE uses an open-source BYOK model. Open the settings icon in the app, choose 
 - Selecting `Local default` and saving removes the stored provider key.
 - Each analysis request carries its own provider configuration, so one user cannot change another user's model.
 - The key and screenshot are sent to the selected model vendor during analysis. Review that vendor's data policy before using real conversations.
+- Contact and meeting planning are separate model passes. Revising either stage makes another request only for that stage.
 
 WSL Web sends the request through the stateless localhost adapter on port `8787` because arbitrary vendor endpoints may not accept browser-origin requests. This is a local development compatibility process, not a hosted account or configuration service. Do not save a real key in a shared browser profile.
 

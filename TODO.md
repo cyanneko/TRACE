@@ -487,6 +487,32 @@ npx expo export --platform ios
 
 Commit: `feat(agent): model and link self participants`
 
+## Iteration 20 - Sequential Agent Planning and Review Feedback
+
+Status: completed
+
+- [x] Preserve Iteration 19 as `iteration-19-self-participant-linking` before editing.
+- [x] Split model planning into explicit `contacts` and `meetings` request scopes.
+- [x] Always stop at contact review first, including the zero-card state, so the user can correct missed identities.
+- [x] Mark the user's thread identity with `isSelf` and conservatively recover a missing self card from grounded self-introduction evidence.
+- [x] Write confirmed contacts before requesting meeting actions with the refreshed local contact index.
+- [x] Merge both passes under one workflow run without action or evidence ID collisions.
+- [x] Add editable written feedback and scoped retry controls to both review stages.
+- [x] Preserve confirmed contacts when meeting planning fails and retry only the meeting pass.
+- [x] Verify that the meeting request contains the newly saved self contact and stage feedback.
+- [x] Cover zero-contact continuation, two-pass participant linking, failed-pass recovery, and mobile overflow in Playwright.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(agent): sequence contact and meeting planning`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

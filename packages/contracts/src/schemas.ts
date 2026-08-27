@@ -14,6 +14,7 @@ export const ThreadParticipantSchema = z.object({
   displayName: NonEmptyStringSchema,
   contactId: z.string().trim().optional(),
   confidence: ConfidenceSchema,
+  isSelf: z.boolean().optional(),
 });
 
 export const ThreadContextSchema = z.object({
@@ -327,6 +328,8 @@ export const FixtureIdSchema = z.enum([
   "no-action",
 ]);
 
+export const AnalysisScopeSchema = z.enum(["all", "contacts", "meetings"]);
+
 export const AnalyzeRequestSchema = z
   .object({
     screenshotDataUrl: z
@@ -339,6 +342,9 @@ export const AnalyzeRequestSchema = z
     memories: z.array(z.lazy(() => MemoryEntrySchema)).max(50).default([]),
     meetings: z.array(MeetingSummarySchema).max(200).default([]),
     entityMemories: z.array(EntityMemorySchema).max(300).default([]),
+    actionScope: AnalysisScopeSchema.default("all"),
+    priorThread: ThreadContextSchema.optional(),
+    reviewFeedback: z.string().trim().max(2_000).default(""),
     timezone: z.string().trim().min(1).max(100),
     currentTime: z.iso.datetime(),
     fixtureId: FixtureIdSchema.optional(),
@@ -458,6 +464,7 @@ export type UserVisionProvider = z.infer<typeof UserVisionProviderSchema>;
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>;
 export type AnalyzeModelOutput = z.infer<typeof AnalyzeModelOutputSchema>;
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>;
+export type AnalysisScope = z.infer<typeof AnalysisScopeSchema>;
 export type ContactSummary = z.infer<typeof ContactSummarySchema>;
 export type ContactRecord = z.infer<typeof ContactRecordSchema>;
 export type MeetingRecord = z.infer<typeof MeetingRecordSchema>;
