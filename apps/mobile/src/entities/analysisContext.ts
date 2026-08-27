@@ -3,6 +3,7 @@ import type { ContactRecord, ContactSummary, MeetingRecord, MeetingSummary } fro
 function contactSummary(contact: ContactRecord): ContactSummary {
   return {
     id: contact.id,
+    externalContactId: contact.externalContactId,
     displayName: contact.displayName,
     givenName: contact.givenName,
     familyName: contact.familyName,
@@ -43,6 +44,7 @@ export function mergeContactContext(
     includedLocalIds.add(local.id);
     return {
       id: local.id,
+      externalContactId: local.externalContactId ?? source.externalContactId ?? source.id,
       displayName: source.displayName || local.displayName,
       givenName: source.givenName || local.givenName,
       familyName: source.familyName || local.familyName,

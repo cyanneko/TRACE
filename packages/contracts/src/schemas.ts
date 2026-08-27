@@ -255,6 +255,7 @@ export const AnalyzeModelOutputSchema = AnalyzeResultSchema.omit({
 
 export const ContactSummarySchema = z.object({
   id: NonEmptyStringSchema,
+  externalContactId: z.string().trim().optional(),
   displayName: NonEmptyStringSchema,
   givenName: z.string().optional(),
   familyName: z.string().optional(),

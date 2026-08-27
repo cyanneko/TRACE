@@ -226,6 +226,27 @@ test("mobile no-action state stays conservative and within the viewport", async 
   expect(widths.body).toBe(widths.viewport);
 });
 
+test("a stale participant contact id is not displayed as a current match", async ({ page }) => {
+  await page.route("**/v1/analyze", async (route) => {
+    const response = await route.fetch();
+    const body = route.request().postDataJSON() as { actionScope?: string };
+    const result = (await response.json()) as {
+      thread?: { participants?: Array<{ contactId?: string }> };
+    };
+    if (body.actionScope === "contacts" && result.thread?.participants?.[0]) {
+      result.thread.participants[0].contactId = "deleted-contact";
+    }
+    await route.fulfill({ response, json: result });
+  });
+
+  await page.goto("/?__trace_fixture=new-contact");
+  await uploadScreenshot(page);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+
+  await expect(page.getByText("Not in contacts", { exact: true })).toBeVisible();
+  await expect(page.getByText("Contact matched", { exact: true })).toHaveCount(0);
+});
+
 test("a description-only request reaches insights and can update global memory without actions", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const description = "请记住：我希望所有会议后的跟进都保持简洁。";

@@ -37,7 +37,12 @@ describe("analysis entity context", () => {
     );
 
     expect(result).toEqual([
-      expect.objectContaining({ id: local.id, displayName: "Maya Chen", company: "Northstar" }),
+      expect.objectContaining({
+        id: local.id,
+        externalContactId: "native-maya",
+        displayName: "Maya Chen",
+        company: "Northstar",
+      }),
     ]);
   });
 

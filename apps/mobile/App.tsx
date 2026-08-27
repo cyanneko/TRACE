@@ -1333,6 +1333,10 @@ function ReviewScreen({
     () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
     [analysis.thread.evidence],
   );
+  const currentContactIds = useMemo(
+    () => new Set(contacts.flatMap((contact) => [contact.id, ...(contact.externalContactId ? [contact.externalContactId] : [])])),
+    [contacts],
+  );
   const stageCards = cards.filter(stage === "contacts" ? isContactAction : isMeetingAction);
   const selectedStageCount = stageCards.filter((card) => selectedIds.has(card.id)).length;
   const hasContactStage = cards.some(isContactAction);
@@ -1387,20 +1391,25 @@ function ReviewScreen({
             <Text style={styles.summary}>{analysis.thread.summary}</Text>
             {analysis.thread.participants.length > 0 ? (
               <View style={styles.participants}>
-                {analysis.thread.participants.map((participant) => (
-                  <View key={participant.displayName} style={styles.participant}>
-                    <Text style={styles.participantName}>{participant.displayName}</Text>
-                    <Text style={styles.participantMatch}>
-                      {participant.isSelf
-                        ? participant.contactId
-                          ? "You · Contact matched"
-                          : "You · Not in contacts"
-                        : participant.contactId
-                          ? "Contact matched"
-                          : "Not in contacts"}
-                    </Text>
-                  </View>
-                ))}
+                {analysis.thread.participants.map((participant) => {
+                  const contactMatched = Boolean(
+                    participant.contactId && currentContactIds.has(participant.contactId),
+                  );
+                  return (
+                    <View key={participant.displayName} style={styles.participant}>
+                      <Text style={styles.participantName}>{participant.displayName}</Text>
+                      <Text style={styles.participantMatch}>
+                        {participant.isSelf
+                          ? contactMatched
+                            ? "You · Contact matched"
+                            : "You · Not in contacts"
+                          : contactMatched
+                            ? "Contact matched"
+                            : "Not in contacts"}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             ) : null}
             {analysis.thread.uncertainties.length > 0 ? (
