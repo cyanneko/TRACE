@@ -1,4 +1,4 @@
-import type { InsightRequest } from "@trace/contracts";
+import { USER_NOTE_EVIDENCE_ID, type InsightRequest } from "@trace/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { getAnalyzeFixture } from "../fixtures/analyzeFixtures.js";
@@ -246,6 +246,45 @@ function insightRequest(): InsightRequest {
 }
 
 describe("parseInsightOutputWithRepair", () => {
+  it("repairs an empty operation list when the user directly commands a Global Memory change", async () => {
+    const input = {
+      ...insightRequest(),
+      note: "请把我喜欢简短跟进添加到 Global Memory。",
+    };
+    const repair = vi.fn(async (_invalidOutput: string, _issues: ModelValidationIssue[]) =>
+      JSON.stringify({
+        insights: [],
+        unresolvedQuestions: [],
+        globalMemoryOperations: [
+          {
+            type: "create",
+            content: "Prefer concise follow-ups.",
+            evidenceRefs: [USER_NOTE_EVIDENCE_ID],
+            confidence: 1,
+          },
+        ],
+      }),
+    );
+
+    const result = await parseInsightOutputWithRepair({
+      input,
+      initial: async () =>
+        JSON.stringify({ insights: [], unresolvedQuestions: [], globalMemoryOperations: [] }),
+      repair,
+    });
+
+    expect(repair).toHaveBeenCalledOnce();
+    expect(repair.mock.calls[0]?.[1]).toContainEqual(
+      expect.objectContaining({ path: "globalMemoryOperations" }),
+    );
+    expect(result.globalMemoryOperations).toEqual([
+      expect.objectContaining({
+        type: "create",
+        evidenceRefs: [USER_NOTE_EVIDENCE_ID],
+      }),
+    ]);
+  });
+
   it("accepts grounded references and category-free global memory operations", async () => {
     const input = insightRequest();
     const evidenceId = input.thread.evidence[0]!.id;

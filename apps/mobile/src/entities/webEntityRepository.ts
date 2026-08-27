@@ -268,7 +268,7 @@ export class WebEntityRepository implements EntityRepository {
     input: ApplyGlobalMemoryOperationsInput,
   ): Promise<GlobalMemoryCommitRecord> {
     const store = this.read();
-    const idempotencyKey = `global-memory:${input.sourceRunId}`;
+    const idempotencyKey = `global-memory:${input.sourceRunId}:${input.insightGeneratedAt}`;
     const existing = store.globalMemoryCommits.find(
       (record) => record.idempotencyKey === idempotencyKey,
     );

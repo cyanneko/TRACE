@@ -1,3 +1,4 @@
+import { USER_NOTE_EVIDENCE_ID } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
 import { executionReducer, initialExecutionState } from "./reducer";
@@ -17,5 +18,36 @@ describe("executionReducer", () => {
     expect(failed.status).toBe("partial");
     expect(failed.results).toHaveLength(1);
     expect(failed.error).toBe("Insights unavailable");
+  });
+
+  it("keeps proposed and skipped Global Memory operation counts visible", () => {
+    const complete = executionReducer(initialExecutionState, {
+      type: "INSIGHTS_READY",
+      insights: {
+        sourceRunId: "10000000-0000-4000-8000-000000000001",
+        generatedAt: "2026-08-26T03:30:00.000Z",
+        provider: { fixture: true, id: "fixture", model: "fixture" },
+        insights: [],
+        unresolvedQuestions: [],
+        globalMemoryOperations: [
+          {
+            type: "create",
+            content: "Prefer concise follow-ups.",
+            evidenceRefs: [USER_NOTE_EVIDENCE_ID],
+            confidence: 1,
+          },
+        ],
+      },
+      globalMemoryChangeCount: 0,
+      globalMemoryOperationCount: 1,
+      globalMemorySkippedCount: 1,
+    });
+
+    expect(complete).toMatchObject({
+      status: "complete",
+      globalMemoryChangeCount: 0,
+      globalMemoryOperationCount: 1,
+      globalMemorySkippedCount: 1,
+    });
   });
 });

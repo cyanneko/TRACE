@@ -31,6 +31,7 @@ export type CommitSuccessfulActionInput = {
 
 export type ApplyGlobalMemoryOperationsInput = {
   sourceRunId: string;
+  insightGeneratedAt: string;
   operations: GlobalMemoryOperation[];
 };
 

@@ -445,6 +445,7 @@ export default function App() {
       });
       const memoryCommit = await entityRepository.applyGlobalMemoryOperations({
         sourceRunId: currentAnalysis.runId,
+        insightGeneratedAt: insightResult.generatedAt,
         operations: insightResult.globalMemoryOperations,
       });
       await refreshEntities();
@@ -456,6 +457,8 @@ export default function App() {
           memoryCommit.createdMemoryIds.length +
           memoryCommit.updatedMemoryIds.length +
           memoryCommit.deletedMemoryIds.length,
+        globalMemoryOperationCount: insightResult.globalMemoryOperations.length,
+        globalMemorySkippedCount: memoryCommit.skippedOperations,
       });
     } catch (insightError) {
       updateApiHealth(insightError);
@@ -1094,6 +1097,7 @@ export default function App() {
             analysis={analysis}
             execution={execution}
             executionMode={analysis.provider.fixture ? "demo" : platformServices.capabilities.actions}
+            note={note}
             onNewThread={startNewThread}
             onRetryInsights={() => void retryInsights()}
           />

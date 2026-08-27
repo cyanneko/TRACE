@@ -1,4 +1,4 @@
-import type { InsightRequest } from "@trace/contracts";
+import { USER_NOTE_EVIDENCE_ID, type InsightRequest } from "@trace/contracts";
 import { describe, expect, it } from "vitest";
 
 import { getAnalyzeFixture } from "../fixtures/analyzeFixtures.js";
@@ -120,5 +120,17 @@ describe("buildInsightsPrompt", () => {
 
     expect(prompt).toContain("globalMemoryOperations.0.memoryId");
     expect(prompt).toContain("Not an active global memory");
+  });
+
+  it("marks an explicit Global Memory command and gives the user note a stable evidence id", () => {
+    const prompt = buildInsightsPrompt({
+      ...insightRequest(),
+      note: "请把我喜欢简短跟进添加到 Global Memory。",
+      screenshotDataUrl: undefined,
+    });
+
+    expect(prompt).toContain('"explicitGlobalMemoryInstruction":true');
+    expect(prompt).toContain(`"id":"${USER_NOTE_EVIDENCE_ID}"`);
+    expect(prompt).toContain("MUST return at least one matching globalMemoryOperation");
   });
 });

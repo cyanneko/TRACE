@@ -303,7 +303,7 @@ export class SqliteEntityRepository implements EntityRepository {
     input: ApplyGlobalMemoryOperationsInput,
   ): Promise<GlobalMemoryCommitRecord> {
     const database = await this.database();
-    const idempotencyKey = `global-memory:${input.sourceRunId}`;
+    const idempotencyKey = `global-memory:${input.sourceRunId}:${input.insightGeneratedAt}`;
     const existingRow = await database.getFirstAsync<PayloadRow>(
       "SELECT payload FROM entity_action_commits WHERE idempotency_key = ?",
       idempotencyKey,

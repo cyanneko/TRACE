@@ -1,5 +1,6 @@
 import {
   EntityMemorySchema,
+  USER_NOTE_EVIDENCE_ID,
   type CreateContactCard,
   type CreateMeetingCard,
   type MemoryEntry,
@@ -103,6 +104,7 @@ describe("WebEntityRepository", () => {
     });
     const input = {
       sourceRunId: "20000000-0000-4000-8000-000000000020",
+      insightGeneratedAt: "2026-08-26T03:30:00.000Z",
       operations: [
         {
           type: "update" as const,
@@ -156,6 +158,39 @@ describe("WebEntityRepository", () => {
     expect(persisted.globalMemoryCommits).toHaveLength(1);
   });
 
+  it("allows a repaired insight from the same analysis run to apply a later memory operation", async () => {
+    const store = memoryStore();
+    const entities = repository(store);
+    const sourceRunId = "20000000-0000-4000-8000-000000000022";
+
+    await entities.applyGlobalMemoryOperations({
+      sourceRunId,
+      insightGeneratedAt: "2026-08-26T03:30:00.000Z",
+      operations: [],
+    });
+    const repaired = await entities.applyGlobalMemoryOperations({
+      sourceRunId,
+      insightGeneratedAt: "2026-08-26T03:31:00.000Z",
+      operations: [
+        {
+          type: "create",
+          content: "Prefer concise follow-ups.",
+          evidenceRefs: [USER_NOTE_EVIDENCE_ID],
+          confidence: 1,
+        },
+      ],
+    });
+
+    expect(repaired.createdMemoryIds).toHaveLength(1);
+    await expect(entities.listMemories(GLOBAL_MEMORY_OWNER)).resolves.toEqual([
+      expect.objectContaining({ content: "Prefer concise follow-ups.", source: "insight" }),
+    ]);
+    const persisted = JSON.parse(store.getItem(ENTITY_STORAGE_KEY) ?? "{}") as {
+      globalMemoryCommits?: unknown[];
+    };
+    expect(persisted.globalMemoryCommits).toHaveLength(2);
+  });
+
   it("opens an Iteration 24 entity store before adding insight commit metadata", async () => {
     const store = memoryStore({
       [ENTITY_STORAGE_KEY]: JSON.stringify({
@@ -172,6 +207,7 @@ describe("WebEntityRepository", () => {
     await expect(
       entities.applyGlobalMemoryOperations({
         sourceRunId: "20000000-0000-4000-8000-000000000021",
+        insightGeneratedAt: "2026-08-26T03:30:00.000Z",
         operations: [],
       }),
     ).resolves.toMatchObject({ skippedOperations: 0 });

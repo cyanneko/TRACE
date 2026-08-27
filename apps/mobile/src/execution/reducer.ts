@@ -7,6 +7,8 @@ export type ExecutionState = {
   writtenMemoryIds: string[];
   supersededMemoryIds: string[];
   globalMemoryChangeCount: number;
+  globalMemoryOperationCount: number;
+  globalMemorySkippedCount: number;
   insights: InsightResult | null;
   error: string | null;
 };
@@ -18,6 +20,8 @@ export const initialExecutionState: ExecutionState = {
   writtenMemoryIds: [],
   supersededMemoryIds: [],
   globalMemoryChangeCount: 0,
+  globalMemoryOperationCount: 0,
+  globalMemorySkippedCount: 0,
   insights: null,
   error: null,
 };
@@ -32,7 +36,13 @@ export type ExecutionEvent =
       supersededMemoryIds: string[];
     }
   | { type: "INSIGHTS_START" }
-  | { type: "INSIGHTS_READY"; insights: InsightResult; globalMemoryChangeCount: number }
+  | {
+      type: "INSIGHTS_READY";
+      insights: InsightResult;
+      globalMemoryChangeCount: number;
+      globalMemoryOperationCount: number;
+      globalMemorySkippedCount: number;
+    }
   | { type: "FAILED"; error: string }
   | { type: "MEMORY_DELETED"; memoryId: string }
   | { type: "RESET" };
@@ -58,6 +68,8 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
         status: "complete",
         insights: event.insights,
         globalMemoryChangeCount: event.globalMemoryChangeCount,
+        globalMemoryOperationCount: event.globalMemoryOperationCount,
+        globalMemorySkippedCount: event.globalMemorySkippedCount,
         error: null,
       };
     case "FAILED":

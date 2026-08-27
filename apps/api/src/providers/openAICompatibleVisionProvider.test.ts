@@ -1,4 +1,8 @@
-import type { AnalyzeRequest, InsightRequest } from "@trace/contracts";
+import {
+  USER_NOTE_EVIDENCE_ID,
+  type AnalyzeRequest,
+  type InsightRequest,
+} from "@trace/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { VisionProviderConfig } from "../config.js";
@@ -156,6 +160,51 @@ describe("OpenAICompatibleVisionProvider", () => {
       "The user prefers a concise follow-up",
     );
     expect(result.globalMemoryOperations[0]?.type).toBe("create");
+  });
+
+  it("repairs a silently ignored direct Global Memory instruction", async () => {
+    let completion = 0;
+    const prompts: string[] = [];
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body)) as {
+        messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
+      };
+      const userContent = requestBody.messages?.[1]?.content;
+      prompts.push(Array.isArray(userContent) ? (userContent[0]?.text ?? "") : "");
+      completion += 1;
+      return completionResponse(
+        JSON.stringify(
+          completion === 1
+            ? { insights: [], unresolvedQuestions: [], globalMemoryOperations: [] }
+            : {
+                insights: [],
+                unresolvedQuestions: [],
+                globalMemoryOperations: [
+                  {
+                    type: "create",
+                    content: "Prefer concise follow-ups.",
+                    evidenceRefs: [USER_NOTE_EVIDENCE_ID],
+                    confidence: 1,
+                  },
+                ],
+              },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await new OpenAICompatibleVisionProvider(config).generateInsights({
+      ...insightInput(),
+      note: "请把我喜欢简短跟进添加到 Global Memory。",
+      screenshotDataUrl: undefined,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(prompts[0]).toContain('"explicitGlobalMemoryInstruction":true');
+    expect(prompts[1]).toContain("no operation was returned");
+    expect(result.globalMemoryOperations).toEqual([
+      expect.objectContaining({ evidenceRefs: [USER_NOTE_EVIDENCE_ID] }),
+    ]);
   });
 
   it("reports output truncated at the model token limit without a repair request", async () => {

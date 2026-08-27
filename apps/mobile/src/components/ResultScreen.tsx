@@ -1,4 +1,4 @@
-import type { AnalyzeResult } from "@trace/contracts";
+import { USER_NOTE_EVIDENCE_ID, type AnalyzeResult } from "@trace/contracts";
 import * as Clipboard from "expo-clipboard";
 import {
   ArrowLeft,
@@ -23,6 +23,7 @@ type Props = {
   analysis: AnalyzeResult;
   execution: ExecutionState;
   executionMode: "demo" | "native";
+  note: string;
   onNewThread: () => void;
   onRetryInsights: () => void;
 };
@@ -44,14 +45,26 @@ export function ResultScreen({
   analysis,
   execution,
   executionMode,
+  note,
   onNewThread,
   onRetryInsights,
 }: Props) {
   const [copiedInsight, setCopiedInsight] = useState<number | null>(null);
   const hasWrites = execution.results.length > 0;
   const evidenceById = useMemo(
-    () => new Map(analysis.thread.evidence.map((evidence) => [evidence.id, evidence])),
-    [analysis.thread.evidence],
+    () =>
+      new Map([
+        ...analysis.thread.evidence.map((evidence) => [evidence.id, evidence] as const),
+        ...(note.trim()
+          ? [
+              [
+                USER_NOTE_EVIDENCE_ID,
+                { id: USER_NOTE_EVIDENCE_ID, quote: note.trim(), speaker: "User" },
+              ] as const,
+            ]
+          : []),
+      ]),
+    [analysis.thread.evidence, note],
   );
   const actionById = useMemo(
     () => new Map(analysis.actionCards.map((action) => [action.id, action])),
@@ -162,6 +175,22 @@ export function ResultScreen({
                 <Text style={styles.memoryUpdateMeta}>
                   {execution.globalMemoryChangeCount} automatic change
                   {execution.globalMemoryChangeCount === 1 ? "" : "s"} applied
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {execution.status === "complete" && execution.globalMemoryChangeCount === 0 ? (
+            <View style={[styles.memoryUpdate, styles.memoryUnchanged]}>
+              <Database color={colors.textMuted} size={18} strokeWidth={2} />
+              <View style={styles.memoryUpdateCopy}>
+                <Text style={[styles.memoryUpdateTitle, styles.memoryUnchangedTitle]}>
+                  Global memory unchanged
+                </Text>
+                <Text style={styles.memoryUpdateMeta}>
+                  {execution.globalMemoryOperationCount > 0
+                    ? `${execution.globalMemorySkippedCount} proposed change${execution.globalMemorySkippedCount === 1 ? " was" : "s were"} already present or no longer applicable.`
+                    : "The model found no grounded global change in this thread."}
                 </Text>
               </View>
             </View>
@@ -455,6 +484,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
     marginTop: 2,
+  },
+  memoryUnchanged: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  memoryUnchangedTitle: {
+    color: colors.text,
   },
   insightList: {
     gap: 12,

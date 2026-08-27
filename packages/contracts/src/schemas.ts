@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const USER_NOTE_EVIDENCE_ID = "trace-user-note";
+
 const ConfidenceSchema = z.number().min(0).max(1);
 const NonEmptyStringSchema = z.string().trim().min(1);
 

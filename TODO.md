@@ -670,6 +670,32 @@ npm run build:web
 
 Commit: `fix(workflow): continue zero-action threads to insights`
 
+## Iteration 27 - Explicit Global Memory Commands
+
+Status: completed
+
+- [x] Preserve Iteration 26 as `iteration-26-zero-action-insight-continuation` before editing.
+- [x] Reproduce the silent no-op produced when a model ignores an explicit Global Memory command.
+- [x] Give the user's description a stable evidence ID that Insight operations can cite.
+- [x] Detect explicit Chinese, English, and mixed-language Global Memory commands without treating ordinary conversation as a command.
+- [x] Require one structured repair pass when a live model silently returns no operation for a direct command.
+- [x] Keep model-led create, update, and delete decisions while preserving reference validation.
+- [x] Allow a newer Insight response from the same analysis run to supersede an earlier empty memory commit.
+- [x] Show whether Global Memory changed, was already current, or received no grounded proposal.
+- [x] Run regression checks, Web build, iOS export, and mobile visual verification.
+- [x] Publish the iteration to GitHub.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+(cd apps/mobile && npx expo export --platform ios)
+```
+
+Commit: `fix(memory): honor explicit global memory commands`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

@@ -1,10 +1,13 @@
 import {
   AnalyzeModelOutputSchema,
   InsightBundleSchema,
+  USER_NOTE_EVIDENCE_ID,
   type AnalyzeModelOutput,
   type InsightBundle,
   type InsightRequest,
 } from "@trace/contracts";
+
+import { hasExplicitGlobalMemoryInstruction } from "../insights/globalMemoryInstruction.js";
 
 export type ModelValidationIssue = {
   message: string;
@@ -206,6 +209,7 @@ function parse(content: string) {
 function insightReferenceIssues(input: InsightRequest, bundle: InsightBundle): ModelValidationIssue[] {
   const issues: ModelValidationIssue[] = [];
   const evidenceIds = new Set(input.thread.evidence.map((evidence) => evidence.id));
+  if (input.note) evidenceIds.add(USER_NOTE_EVIDENCE_ID);
   const activeMemories = input.entityMemories.filter((memory) => memory.status === "active");
   const memoryIds = new Set(activeMemories.map((memory) => memory.id));
   const globalMemoryIds = new Set(
@@ -249,6 +253,17 @@ function insightReferenceIssues(input: InsightRequest, bundle: InsightBundle): M
       });
     }
   });
+
+  if (
+    hasExplicitGlobalMemoryInstruction(input.note) &&
+    bundle.globalMemoryOperations.length === 0
+  ) {
+    issues.push({
+      message:
+        "The user explicitly requested a Global Memory change, but no operation was returned. Return the grounded create, update, or delete operation instead of silently ignoring the command.",
+      path: "globalMemoryOperations",
+    });
+  }
 
   return issues.slice(0, 12);
 }

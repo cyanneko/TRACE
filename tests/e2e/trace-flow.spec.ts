@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { USER_NOTE_EVIDENCE_ID } from "@trace/contracts";
 import path from "node:path";
 
 const screenshotPath = path.resolve("apps/mobile/assets/icon.png");
@@ -143,6 +144,7 @@ test("mobile no-action state stays conservative and within the viewport", async 
   await expect(page.getByText("Analysis complete", { exact: true })).toBeVisible();
   await expect(page.getByText("No writes needed", { exact: true })).toBeVisible();
   await expect(page.getByText("Thread processed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Global memory unchanged", { exact: true })).toBeVisible();
   const widths = await page.evaluate(() => ({ body: document.body.scrollWidth, viewport: window.innerWidth }));
   expect(widths.body).toBe(widths.viewport);
 });
@@ -166,7 +168,7 @@ test("a description-only request reaches insights and can update global memory w
       {
         type: "create",
         content: "Prefer concise follow-ups after every meeting.",
-        evidenceRefs: [insightRequest?.thread?.evidence?.[0]?.id],
+        evidenceRefs: [USER_NOTE_EVIDENCE_ID],
         confidence: 0.95,
       },
     ];
@@ -188,21 +190,44 @@ test("a description-only request reaches insights and can update global memory w
   });
   expect(insightRequest?.screenshotDataUrl).toBeUndefined();
 
+  await page.getByRole("button", { name: "Analyze another thread" }).click();
+  await page.getByLabel("Describe something").fill(description);
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await page.getByRole("button", { name: "Analyze meetings without contacts" }).click();
+  await page.getByRole("button", { name: "Continue to insights" }).click();
+  await expect(page.getByText("Global memory unchanged", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("1 proposed change was already present or no longer applicable.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
   await page.getByRole("tab", { name: "Global memory" }).click();
   await expect(
     page.getByText("Prefer concise follow-ups after every meeting.", { exact: true }),
-  ).toBeVisible();
-  const storedMemory = await page.evaluate(() => {
+  ).toHaveCount(1);
+  const persistedMemory = await page.evaluate(() => {
     const state = JSON.parse(localStorage.getItem("trace.entities.v2") ?? "{}") as {
-      memories?: Array<{ content: string; ownerType: string; source: string }>;
+      globalMemoryCommits?: unknown[];
+      memories?: Array<{
+        content: string;
+        ownerType: string;
+        source: string;
+        sourceEvidenceRefs: string[];
+      }>;
     };
-    return state.memories?.find(
-      (memory) =>
-        memory.ownerType === "global" &&
-        memory.content === "Prefer concise follow-ups after every meeting.",
-    );
+    return {
+      commits: state.globalMemoryCommits?.length ?? 0,
+      memory: state.memories?.find(
+        (memory) =>
+          memory.ownerType === "global" &&
+          memory.content === "Prefer concise follow-ups after every meeting.",
+      ),
+    };
   });
-  expect(storedMemory?.source).toBe("insight");
+  expect(persistedMemory.commits).toBe(2);
+  expect(persistedMemory.memory?.source).toBe("insight");
+  expect(persistedMemory.memory?.sourceEvidenceRefs).toEqual([USER_NOTE_EVIDENCE_ID]);
 });
 
 test("global memory and settings use compact edge navigation", async ({ page }) => {
