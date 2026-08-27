@@ -538,6 +538,33 @@ npx expo export --platform ios
 
 Commit: `fix(meetings): preserve and edit linked participants`
 
+## Iteration 22 - Compact Composer and Provider Dropdown
+
+Status: completed
+
+- [x] Preserve Iteration 21 as `iteration-21-meeting-participant-review` before editing.
+- [x] Center the empty New thread title and composer as one compact group.
+- [x] Rename the description prompt to `Describe something` and center its empty state.
+- [x] Keep the empty description area to roughly half the composer height.
+- [x] Expand description input to the full composer after typing and restore the empty layout after clearing.
+- [x] Remove the visible Fixture scenario selector and Fixture provider option.
+- [x] Keep deterministic fixtures accessible only through an internal browser-test query.
+- [x] Replace Provider tiles with a downward-opening single-select menu.
+- [x] Discard legacy locally saved Fixture provider settings.
+- [x] Verify empty, active, reset, and Provider dropdown states at iPhone width.
+- [x] Run all tests, Web build, and iOS export before publishing.
+
+Completion check:
+
+```bash
+npm run check
+npm run test:e2e
+npm run build:web
+npx expo export --platform ios
+```
+
+Commit: `feat(capture): compact composer and provider selection`
+
 ## Deferred Beyond MVP
 
 - Authentication and multi-user sync.

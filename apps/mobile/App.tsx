@@ -6,7 +6,6 @@ import {
   type ContactRecord,
   type ContactSummary,
   type EntityMemory,
-  type FixtureId,
   type MemoryEntry,
   type MeetingRecord,
   type ProviderInfo,
@@ -44,13 +43,13 @@ import {
 
 import { analyzeScreenshot, generateInsights, getHealth, TraceApiError } from "./src/api/client";
 import { mergeSequentialAnalysis } from "./src/analysis/sequentialPlanning";
+import { activeTestFixtureId } from "./src/analysis/testFixture";
 import { ActionCardView } from "./src/components/ActionCardView";
 import { BottomNavigation, type MainTab } from "./src/components/BottomNavigation";
 import { ContactsScreen } from "./src/components/ContactsScreen";
 import { MeetingsScreen } from "./src/components/MeetingsScreen";
 import { ProviderSettingsScreen } from "./src/components/ProviderSettingsScreen";
 import { ResultScreen } from "./src/components/ResultScreen";
-import { ScenarioSelector } from "./src/components/ScenarioSelector";
 import { DemoContactSource } from "./src/contacts/demoContactSource";
 import { mergeContactContext, mergeMeetingContext } from "./src/entities/analysisContext";
 import { DemoActionExecutor } from "./src/execution/demoActionExecutor";
@@ -96,7 +95,6 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>("capture");
   const [screenshot, setScreenshot] = useState<SelectedScreenshot | null>(null);
   const [note, setNote] = useState("");
-  const [fixtureId, setFixtureId] = useState<FixtureId>("meeting");
   const [provider, setProvider] = useState<ProviderInfo | null>(null);
   const [serverProvider, setServerProvider] = useState<ProviderInfo | null>(null);
   const [userVisionProvider, setUserVisionProvider] = useState<UserVisionProvider | null>(null);
@@ -306,7 +304,8 @@ export default function App() {
     feedback = "",
   ) {
     const currentTime = new Date().toISOString();
-    const useFixture = provider?.fixture ?? true;
+    const fixtureId = activeTestFixtureId();
+    const useFixture = Boolean(fixtureId && (provider?.fixture ?? true));
     const [memories, sourceContacts, sourceMeetings] = await Promise.all([
       memoryRepository.listActive(),
       useFixture ? fixtureContactSource.list() : platformServices.contacts.list(),
@@ -355,6 +354,11 @@ export default function App() {
   async function analyze() {
     if (!screenshot && !note.trim()) {
       setError("Choose a screenshot or describe the conversation.");
+      return;
+    }
+    if ((!provider || provider.fixture) && !activeTestFixtureId()) {
+      setError(null);
+      setSettingsOpen(true);
       return;
     }
 
@@ -927,7 +931,11 @@ export default function App() {
     setSettingsOpen(false);
   }
 
-  const providerLabel = provider ? `${provider.id} · ${provider.model}` : "Checking API";
+  const providerLabel = provider
+    ? provider.fixture && !activeTestFixtureId()
+      ? "Set provider"
+      : `${provider.id} · ${provider.model}`
+    : "Checking API";
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1030,11 +1038,8 @@ export default function App() {
             busy={busy}
             chooseScreenshot={chooseScreenshot}
             error={error}
-            fixtureId={fixtureId}
-            fixtureMode={provider?.fixture ?? true}
             note={note}
             onAnalyze={analyze}
-            onFixtureChange={setFixtureId}
             onNoteChange={setNote}
             removeScreenshot={removeScreenshot}
             screenshot={screenshot}
@@ -1092,11 +1097,8 @@ type CaptureProps = {
   busy: boolean;
   chooseScreenshot: () => void;
   error: string | null;
-  fixtureId: FixtureId;
-  fixtureMode: boolean;
   note: string;
   onAnalyze: () => void;
-  onFixtureChange: (value: FixtureId) => void;
   onNoteChange: (value: string) => void;
   removeScreenshot: () => void;
   screenshot: SelectedScreenshot | null;
@@ -1106,35 +1108,33 @@ function CaptureScreen({
   busy,
   chooseScreenshot,
   error,
-  fixtureId,
-  fixtureMode,
   note,
   onAnalyze,
-  onFixtureChange,
   onNoteChange,
   removeScreenshot,
   screenshot,
 }: CaptureProps) {
   const { height } = useWindowDimensions();
   const hasInput = Boolean(screenshot || note.trim());
-  const progress = useRef(new Animated.Value(hasInput ? 1 : 0)).current;
+  const descriptionActive = !screenshot && note.length > 0;
+  const composerActive = Boolean(screenshot || note.length > 0);
+  const progress = useRef(new Animated.Value(composerActive ? 1 : 0)).current;
   const initialOffset = Math.max(64, Math.min(180, (height - 500) / 2));
 
   useEffect(() => {
     Animated.timing(progress, {
       duration: 260,
-      toValue: hasInput ? 1 : 0,
+      toValue: composerActive ? 1 : 0,
       useNativeDriver: false,
     }).start();
-  }, [hasInput, progress]);
+  }, [composerActive, progress]);
 
   return (
     <ScrollView contentContainerStyle={styles.captureScroll} keyboardShouldPersistTaps="handled">
       <View style={styles.captureContent}>
-        <Text style={styles.captureTitle}>New thread</Text>
         <Animated.View
           style={[
-            styles.captureBody,
+            styles.captureCluster,
             {
               transform: [
                 {
@@ -1147,113 +1147,113 @@ function CaptureScreen({
             },
           ]}
         >
-          {screenshot ? (
-            <View style={[styles.uploadFrame, styles.uploadFrameSelected]}>
-              <Image resizeMode="contain" source={{ uri: screenshot.uri }} style={previewImageStyle} />
-              <View style={styles.screenshotActions}>
-                <Pressable
-                  accessibilityLabel="Replace chat screenshot"
-                  onPress={chooseScreenshot}
-                  style={({ pressed }) => [styles.screenshotAction, pressed && styles.screenshotActionPressed]}
-                >
-                  <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Remove chat screenshot"
-                  onPress={removeScreenshot}
-                  style={({ pressed }) => [
-                    styles.screenshotAction,
-                    styles.removeScreenshotAction,
-                    pressed && styles.screenshotActionPressed,
-                  ]}
-                >
-                  <X color={colors.danger} size={20} strokeWidth={2.1} />
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.threadComposer}>
-              <Pressable
-                accessibilityLabel="Choose a chat screenshot"
-                onPress={chooseScreenshot}
-                style={({ pressed }) => [styles.chooseScreenshot, pressed && styles.uploadFramePressed]}
-              >
-                <Text style={styles.uploadTitle}>Choose screenshot</Text>
-              </Pressable>
-              <View style={styles.composerDivider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.dividerLine} />
-              </View>
-              <TextInput
-                accessibilityLabel="Describe the conversation"
-                maxLength={2_000}
-                multiline
-                onChangeText={onNoteChange}
-                placeholder="Describe the conversation"
-                placeholderTextColor={colors.textMuted}
-                selectionColor={colors.primary}
-                style={styles.descriptionInput}
-                value={note}
-              />
-            </View>
-          )}
-
-          {error ? <ErrorBanner message={error} /> : null}
-
-          {screenshot ? (
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Additional context</Text>
-              <TextInput
-                maxLength={2_000}
-                multiline
-                onChangeText={onNoteChange}
-                placeholder="Anything the screenshot leaves out?"
-                placeholderTextColor={colors.textMuted}
-                selectionColor={colors.primary}
-                style={styles.noteInput}
-                value={note}
-              />
-              <Text style={styles.characterCount}>{note.length}/2000</Text>
-            </View>
-          ) : null}
-
-          {hasInput ? (
-            <>
-            {fixtureMode ? (
-              <View style={styles.fixtureBand}>
-                <View style={styles.fixtureHeading}>
-                  <Text style={styles.fixtureTitle}>Fixture mode</Text>
-                  <Text style={styles.fixtureCopy}>Deterministic API response</Text>
+          <Text style={styles.captureTitle}>New thread</Text>
+          <View style={styles.captureBody}>
+            {screenshot ? (
+              <View style={[styles.uploadFrame, styles.uploadFrameSelected]}>
+                <Image resizeMode="contain" source={{ uri: screenshot.uri }} style={previewImageStyle} />
+                <View style={styles.screenshotActions}>
+                  <Pressable
+                    accessibilityLabel="Replace chat screenshot"
+                    onPress={chooseScreenshot}
+                    style={({ pressed }) => [styles.screenshotAction, pressed && styles.screenshotActionPressed]}
+                  >
+                    <RotateCcw color={colors.blue} size={19} strokeWidth={2} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Remove chat screenshot"
+                    onPress={removeScreenshot}
+                    style={({ pressed }) => [
+                      styles.screenshotAction,
+                      styles.removeScreenshotAction,
+                      pressed && styles.screenshotActionPressed,
+                    ]}
+                  >
+                    <X color={colors.danger} size={20} strokeWidth={2.1} />
+                  </Pressable>
                 </View>
-                <ScenarioSelector onChange={onFixtureChange} value={fixtureId} />
+              </View>
+            ) : (
+              <View accessibilityLabel="Thread composer" style={styles.threadComposer}>
+                {!descriptionActive ? (
+                  <>
+                    <Pressable
+                      accessibilityLabel="Choose a chat screenshot"
+                      onPress={chooseScreenshot}
+                      style={({ pressed }) => [styles.chooseScreenshot, pressed && styles.uploadFramePressed]}
+                    >
+                      <Text style={styles.uploadTitle}>Choose screenshot</Text>
+                    </Pressable>
+                    <View style={styles.composerDivider}>
+                      <View style={styles.dividerLine} />
+                      <Text style={styles.dividerText}>or</Text>
+                      <View style={styles.dividerLine} />
+                    </View>
+                  </>
+                ) : null}
+                <TextInput
+                  accessibilityLabel="Describe something"
+                  maxLength={2_000}
+                  multiline
+                  onChangeText={onNoteChange}
+                  placeholder="Describe something"
+                  placeholderTextColor={colors.textMuted}
+                  selectionColor={colors.primary}
+                  style={[
+                    styles.descriptionInput,
+                    descriptionActive ? styles.descriptionInputActive : styles.descriptionInputIdle,
+                  ]}
+                  value={note}
+                />
+              </View>
+            )}
+
+            {error ? <ErrorBanner message={error} /> : null}
+
+            {screenshot ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Additional context</Text>
+                <TextInput
+                  maxLength={2_000}
+                  multiline
+                  onChangeText={onNoteChange}
+                  placeholder="Anything the screenshot leaves out?"
+                  placeholderTextColor={colors.textMuted}
+                  selectionColor={colors.primary}
+                  style={styles.noteInput}
+                  value={note}
+                />
+                <Text style={styles.characterCount}>{note.length}/2000</Text>
               </View>
             ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={busy}
-              onPress={onAnalyze}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.primaryButtonPressed,
-                busy && styles.primaryButtonDisabled,
-              ]}
-            >
-              {busy ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Sparkles color="#FFFFFF" size={20} strokeWidth={2.1} />
-              )}
-              <Text style={styles.primaryButtonText}>{busy ? "Analyzing thread" : "Analyze thread"}</Text>
-            </Pressable>
+            {hasInput ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy}
+                  onPress={onAnalyze}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    pressed && styles.primaryButtonPressed,
+                    busy && styles.primaryButtonDisabled,
+                  ]}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Sparkles color="#FFFFFF" size={20} strokeWidth={2.1} />
+                  )}
+                  <Text style={styles.primaryButtonText}>{busy ? "Analyzing thread" : "Analyze thread"}</Text>
+                </Pressable>
 
-            <View style={styles.privacyRow}>
-              <ShieldCheck color={colors.textMuted} size={16} strokeWidth={2} />
-              <Text style={styles.privacyText}>No contacts, meetings or memories change during analysis.</Text>
-            </View>
-            </>
-          ) : null}
+                <View style={styles.privacyRow}>
+                  <ShieldCheck color={colors.textMuted} size={16} strokeWidth={2} />
+                  <Text style={styles.privacyText}>No contacts, meetings or memories change during analysis.</Text>
+                </View>
+              </>
+            ) : null}
+          </View>
         </Animated.View>
       </View>
     </ScrollView>
@@ -1648,8 +1648,11 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   captureContent: {
-    gap: 20,
     maxWidth: 680,
+    width: "100%",
+  },
+  captureCluster: {
+    gap: 10,
     width: "100%",
   },
   captureBody: {
@@ -1662,10 +1665,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   captureTitle: {
+    alignSelf: "center",
     color: colors.text,
     fontSize: 28,
     fontWeight: "700",
     lineHeight: 34,
+    textAlign: "center",
   },
   uploadFrame: {
     backgroundColor: colors.surface,
@@ -1689,19 +1694,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 8,
     borderWidth: 1,
-    minHeight: 258,
+    minHeight: 240,
     overflow: "hidden",
   },
   chooseScreenshot: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 88,
+    minHeight: 100,
     paddingHorizontal: 20,
   },
   composerDivider: {
     alignItems: "center",
     flexDirection: "row",
     gap: 10,
+    minHeight: 20,
     paddingHorizontal: 18,
   },
   dividerLine: {
@@ -1715,12 +1721,20 @@ const styles = StyleSheet.create({
   },
   descriptionInput: {
     color: colors.text,
-    flex: 1,
     fontSize: 17,
     lineHeight: 24,
-    minHeight: 148,
     paddingHorizontal: 18,
     paddingVertical: 16,
+  },
+  descriptionInputIdle: {
+    minHeight: 120,
+    textAlign: "center",
+    textAlignVertical: "center",
+  },
+  descriptionInputActive: {
+    flex: 1,
+    minHeight: 238,
+    textAlign: "left",
     textAlignVertical: "top",
   },
   uploadEmpty: {
@@ -1783,29 +1797,6 @@ const styles = StyleSheet.create({
   },
   characterCount: {
     alignSelf: "flex-end",
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  fixtureBand: {
-    backgroundColor: colors.blueSoft,
-    borderColor: "#C7D5EA",
-    borderRadius: 6,
-    borderWidth: 1,
-    gap: 12,
-    padding: 14,
-  },
-  fixtureHeading: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "space-between",
-  },
-  fixtureTitle: {
-    color: colors.blue,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  fixtureCopy: {
     color: colors.textMuted,
     fontSize: 12,
   },

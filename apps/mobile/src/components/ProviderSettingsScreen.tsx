@@ -10,6 +10,8 @@ import {
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
+  ChevronDown,
   Eye,
   EyeOff,
   KeyRound,
@@ -31,7 +33,8 @@ import {
 import { colors } from "../theme";
 import type { ProviderSettingsStorage } from "../providerSettings/types";
 
-type ProviderChoice = "server" | VisionProviderId;
+type RemoteProviderChoice = Exclude<VisionProviderId, "fixture">;
+type ProviderChoice = "server" | RemoteProviderChoice;
 
 type Props = {
   initialSettings: UserVisionProvider | null;
@@ -43,7 +46,6 @@ type Props = {
 
 const providerChoices: Array<{ id: ProviderChoice; label: string }> = [
   { id: "server", label: "Local default" },
-  { id: "fixture", label: "Fixture" },
   { id: "deepseek", label: "DeepSeek" },
   { id: "glm", label: "GLM" },
   { id: "doubao", label: "Doubao" },
@@ -63,8 +65,10 @@ function presetFor(choice: ProviderChoice) {
 }
 
 export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serverProvider, storage }: Props) {
-  const initialPreset = initialSettings ? presetFor(initialSettings.provider) : undefined;
-  const [choice, setChoice] = useState<ProviderChoice>(initialSettings?.provider ?? "server");
+  const savedChoice = initialSettings?.provider === "fixture" ? "server" : initialSettings?.provider;
+  const initialPreset = savedChoice ? presetFor(savedChoice) : undefined;
+  const [choice, setChoice] = useState<ProviderChoice>(savedChoice ?? "server");
+  const [providerOpen, setProviderOpen] = useState(false);
   const [apiKey, setApiKey] = useState(initialSettings?.apiKey ?? "");
   const [baseURL, setBaseURL] = useState(initialSettings?.baseURL ?? initialPreset?.baseURL ?? "");
   const [customId, setCustomId] = useState(initialSettings?.customId ?? "");
@@ -82,11 +86,12 @@ export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serve
 
   function selectProvider(next: ProviderChoice) {
     setChoice(next);
+    setProviderOpen(false);
     setError(null);
 
     const existing = initialSettings?.provider === next ? initialSettings : null;
     const preset = presetFor(next);
-    if (next !== "server" && next !== "fixture") {
+    if (next !== "server") {
       setApiKey(existing?.apiKey ?? "");
       setBaseURL(existing?.baseURL ?? preset?.baseURL ?? "");
       setCustomId(existing?.customId ?? "");
@@ -106,19 +111,16 @@ export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serve
         return;
       }
 
-      const candidate =
-        choice === "fixture"
-          ? { provider: choice }
-          : {
-              apiKey,
-              baseURL,
-              customId: choice === "custom" ? customId : undefined,
-              imageDetail,
-              imageFormat,
-              jsonMode,
-              model,
-              provider: choice,
-            };
+      const candidate = {
+        apiKey,
+        baseURL,
+        customId: choice === "custom" ? customId : undefined,
+        imageDetail,
+        imageFormat,
+        jsonMode,
+        model,
+        provider: choice,
+      };
       const parsed = UserVisionProviderSchema.safeParse(candidate);
       if (!parsed.success) {
         setError(parsed.error.issues[0]?.message ?? "Check the provider settings and try again.");
@@ -133,7 +135,8 @@ export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serve
     }
   }
 
-  const remote = choice !== "server" && choice !== "fixture";
+  const remote = choice !== "server";
+  const selectedProvider = providerChoices.find((option) => option.id === choice) ?? providerChoices[0]!;
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -150,34 +153,50 @@ export function ProviderSettingsScreen({ initialSettings, onClose, onSave, serve
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Provider</Text>
-          <View style={styles.providerOptions}>
-            {providerChoices.map((option) => {
-              const selected = option.id === choice;
-              return (
-                <Pressable
-                  accessibilityLabel={`Use ${option.label}`}
-                  accessibilityRole="button"
-                  key={option.id}
-                  onPress={() => selectProvider(option.id)}
-                  style={({ pressed }) => [
-                    styles.providerOption,
-                    selected && styles.providerOptionSelected,
-                    pressed && styles.optionPressed,
-                  ]}
-                >
-                  <Text style={[styles.providerOptionText, selected && styles.providerOptionTextSelected]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Pressable
+            accessibilityLabel="Choose vision provider"
+            accessibilityState={{ expanded: providerOpen }}
+            onPress={() => setProviderOpen((open) => !open)}
+            style={({ pressed }) => [styles.providerSelect, pressed && styles.optionPressed]}
+          >
+            <Text style={styles.providerSelectText}>{selectedProvider.label}</Text>
+            <ChevronDown
+              color={colors.blue}
+              size={19}
+              strokeWidth={2.1}
+              style={providerOpen ? styles.providerChevronOpen : undefined}
+            />
+          </Pressable>
+          {providerOpen ? (
+            <View style={styles.providerMenu}>
+              {providerChoices.map((option) => {
+                const selected = option.id === choice;
+                return (
+                  <Pressable
+                    accessibilityLabel={`Use ${option.label}`}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    aria-checked={selected}
+                    key={option.id}
+                    onPress={() => selectProvider(option.id)}
+                    style={({ pressed }) => [styles.providerOption, pressed && styles.optionPressed]}
+                  >
+                    <Text style={[styles.providerOptionText, selected && styles.providerOptionTextSelected]}>
+                      {option.label}
+                    </Text>
+                    {selected ? <Check color={colors.primary} size={17} strokeWidth={2.3} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           {choice === "server" ? (
             <Text style={styles.sectionHint}>
-              {serverProvider ? `${serverProvider.id} · ${serverProvider.model}` : "TRACE local default"}
+              {serverProvider && !serverProvider.fixture
+                ? `${serverProvider.id} · ${serverProvider.model}`
+                : "No live local default is configured. Choose another provider."}
             </Text>
           ) : null}
-          {choice === "fixture" ? <Text style={styles.sectionHint}>Deterministic local test responses</Text> : null}
         </View>
 
         {remote ? (
@@ -420,32 +439,46 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
   },
-  providerOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  providerOption: {
+  providerSelect: {
     alignItems: "center",
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: 6,
     borderWidth: 1,
-    flexBasis: 108,
-    flexGrow: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 46,
+    paddingHorizontal: 12,
   },
-  providerOptionSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
+  providerSelectText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  providerChevronOpen: {
+    transform: [{ rotate: "180deg" }],
+  },
+  providerMenu: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 6,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  providerOption: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 44,
+    paddingHorizontal: 12,
   },
   providerOptionText: {
-    color: colors.textMuted,
-    fontSize: 12,
+    color: colors.text,
+    fontSize: 13,
     fontWeight: "600",
-    textAlign: "center",
   },
   providerOptionTextSelected: {
     color: colors.primary,

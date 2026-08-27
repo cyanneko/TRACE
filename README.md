@@ -26,8 +26,8 @@ The model can propose actions, but it cannot execute them. Only validated cards 
 - Editable action cards for meeting creation/update and contact creation/update.
 - Meeting cards resolve local or external contact IDs to names and use an existing-contact checklist for participants.
 - Per-stage written feedback and scoped retries without repeating confirmed writes.
-- Fixture, DeepSeek, GLM, Doubao, and custom OpenAI-compatible vision providers.
-- Deterministic fixture scenarios for all actions plus a conservative no-action case.
+- DeepSeek, GLM, Doubao, and custom OpenAI-compatible vision providers.
+- A compact Provider dropdown with device-local BYOK settings.
 - Idempotent Web demo actions and native iOS Contacts/Calendar implementations.
 - Inspectable structured memory with active, superseded, and deleted states.
 - Post-confirmation insights, next steps, and suggested messages with grounding references.
@@ -71,13 +71,11 @@ Start Expo Web in another terminal:
 npm run dev:web
 ```
 
-Open `http://localhost:8081`. The header must say `fixture / trace-analyze-fixtures`. Choose any supported image, select a fixture scenario, and complete the review and confirmation flow.
-
-Fixture mode does not inspect the uploaded pixels. It exists for deterministic product and policy tests, is always labelled in the UI, and always uses Demo contacts, memory, and execution even inside an iOS build. Native Contacts/Calendar/SQLite writes are enabled only for a non-fixture provider.
+Open `http://localhost:8081`, open Settings, and configure DeepSeek, GLM, Doubao, Custom, or a live local default. The normal app does not expose the deterministic Fixture provider; it remains an internal browser-test adapter only.
 
 ## Vision Providers
 
-TRACE uses an open-source BYOK model. Open the settings icon in the app, choose DeepSeek, GLM, Doubao, Fixture, or Custom, then enter the provider key and compatibility options. The selection belongs only to the running app:
+TRACE uses an open-source BYOK model. Open the settings icon in the app, expand the Provider dropdown, choose DeepSeek, GLM, Doubao, or Custom, then enter the provider key and compatibility options. The selection belongs only to the running app:
 
 - Web saves the key in that browser profile's localStorage; iOS saves it in the device Keychain.
 - TRACE never writes BYOK settings to its API process, SQLite memory, source files, or a cloud account.
@@ -98,7 +96,6 @@ Then set one default provider:
 
 | `VISION_PROVIDER` | Default base URL | Default model | Image payload |
 | --- | --- | --- | --- |
-| `fixture` | none | `trace-analyze-fixtures` | local fixture |
 | `deepseek` | `https://api.deepseek.com` | `deepseek-v4-flash-vision-exp` | data URL |
 | `glm` | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.6v-flash` | raw base64 |
 | `doubao` | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-2-0-lite-260215` | data URL |
@@ -246,7 +243,7 @@ The MVP API has no authentication and permissive development CORS. Do not expose
 - Native Contacts, Calendar, and SQLite adapters are typechecked and bundled, but still require physical-iPhone acceptance testing.
 - No real vendor call is claimed unless a valid provider key is configured; fixture mode is the reproducible default.
 - The Web executor writes local demo events, not operating-system contacts or calendars.
-- Fixture analysis always uses Demo writes; native side effects require a configured remote provider.
+- Internal automated fixtures use Demo writes; native side effects require a configured remote provider.
 - Calendar creation does not send invitations to participants.
 - The ISO date/time editor is functional but not a production date-picker experience.
 - Contact display-name replacement is conservative and may need locale-aware name handling.

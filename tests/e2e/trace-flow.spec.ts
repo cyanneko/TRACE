@@ -3,6 +3,14 @@ import path from "node:path";
 
 const screenshotPath = path.resolve("apps/mobile/assets/icon.png");
 
+async function setTestFixture(page: Page, fixtureId: string) {
+  await page.evaluate((nextFixtureId) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("__trace_fixture", nextFixtureId);
+    window.history.replaceState({}, "", url);
+  }, fixtureId);
+}
+
 async function uploadScreenshot(page: Page) {
   const chooserPromise = page.waitForEvent("filechooser");
   await page.getByLabel("Choose a chat screenshot").click();
@@ -21,7 +29,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto("/");
+  await page.goto("/?__trace_fixture=meeting");
   await uploadAndAnalyze(page);
   await page.getByRole("button", { name: "Confirm meetings" }).click();
   await expect(page.getByText("会前承诺比日历事件更值得跟进")).toBeVisible();
@@ -79,7 +87,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
   await uploadScreenshot(page);
   await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
   await expect(page.getByText("1 active memory ready")).toHaveCount(0);
-  await page.getByText("Contact update", { exact: true }).click();
+  await setTestFixture(page, "update-contact");
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
@@ -113,7 +121,7 @@ test("confirmed actions persist memory and inform the next thread", async ({ pag
 
 test("mobile no-action state stays conservative and within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/?__trace_fixture=no-action");
   await page.getByRole("tab", { name: "Contacts" }).click();
   await expect(page.getByText("People", { exact: true })).toBeVisible();
   await expect(page.getByText("Maya Chen", { exact: true })).toBeVisible();
@@ -122,7 +130,6 @@ test("mobile no-action state stays conservative and within the viewport", async 
   await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
   await uploadScreenshot(page);
   await expect(page.getByText("Additional context", { exact: true })).toBeVisible();
-  await page.getByText("None", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("Confirm what TRACE understood")).toBeVisible();
 
@@ -144,21 +151,47 @@ test("a selected screenshot can be removed without discarding its description", 
 
   await expect(page.getByLabel("Replace chat screenshot")).toHaveCount(0);
   await expect(page.getByText("Additional context", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Describe the conversation")).toHaveValue("The interview is about Aihola.");
+  await expect(page.getByLabel("Describe something")).toHaveValue("The interview is about Aihola.");
   await expect(page.getByRole("button", { name: "Analyze thread" })).toBeVisible();
 });
 
 test("description-only analysis confirms contacts before meetings and links participants", async ({ page }) => {
-  await page.goto("/");
-  const composer = page.getByLabel("Describe the conversation");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?__trace_fixture=contact-meeting");
+  const title = page.getByText("New thread", { exact: true });
+  const frame = page.getByLabel("Thread composer");
+  const composer = page.getByLabel("Describe something");
+  const initialTitleBox = await title.boundingBox();
+  const initialFrameBox = await frame.boundingBox();
   const initialBox = await composer.boundingBox();
+  expect(initialTitleBox).not.toBeNull();
+  expect(initialFrameBox).not.toBeNull();
+  expect(initialBox).not.toBeNull();
+  expect(Math.abs(initialTitleBox!.x + initialTitleBox!.width / 2 - (initialFrameBox!.x + initialFrameBox!.width / 2))).toBeLessThan(2);
+  expect(initialFrameBox!.y - (initialTitleBox!.y + initialTitleBox!.height)).toBeLessThanOrEqual(12);
+  expect(initialBox!.height).toBeLessThan(initialFrameBox!.height * 0.6);
+
   await composer.fill("林乔介绍了自己，并约我明天下午三点聊半小时合作方案。");
-  await page.getByText("Contact + meeting", { exact: true }).click();
   await page.waitForTimeout(320);
   const activeBox = await composer.boundingBox();
-  expect(initialBox).not.toBeNull();
+  const activeFrameBox = await frame.boundingBox();
   expect(activeBox).not.toBeNull();
+  expect(activeFrameBox).not.toBeNull();
   expect(activeBox!.y).toBeLessThan(initialBox!.y);
+  expect(activeBox!.height).toBeGreaterThan(activeFrameBox!.height * 0.9);
+  await expect(page.getByLabel("Choose a chat screenshot")).toHaveCount(0);
+
+  await composer.fill("");
+  await page.waitForTimeout(320);
+  const resetBox = await composer.boundingBox();
+  const resetFrameBox = await frame.boundingBox();
+  expect(resetBox).not.toBeNull();
+  expect(resetFrameBox).not.toBeNull();
+  expect(resetBox!.height).toBeLessThan(resetFrameBox!.height * 0.6);
+  expect(resetFrameBox!.y).toBeGreaterThan(activeFrameBox!.y);
+  await expect(page.getByLabel("Choose a chat screenshot")).toBeVisible();
+
+  await composer.fill("林乔介绍了自己，并约我明天下午三点聊半小时合作方案。");
 
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await expect(page.getByText("STEP 1 OF 2", { exact: true })).toBeVisible();
@@ -248,11 +281,10 @@ test("self and HR contacts are confirmed before both join the meeting", async ({
       reviewFeedback: body.reviewFeedback,
     });
   });
-  await page.goto("/");
+  await page.goto("/?__trace_fixture=self-meeting");
   await page
-    .getByLabel("Describe the conversation")
+    .getByLabel("Describe something")
     .fill("我叫 Kai。Lina HR 约我明天下午两点面试，请创建我们并把两个人都加入会议。");
-  await page.getByText("Me + HR", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
 
   await expect(page.getByText("创建我的联系人", { exact: true })).toBeVisible();
@@ -343,11 +375,10 @@ test("a failed meeting pass keeps confirmed contacts and can be revised", async 
     }
     await route.continue();
   });
-  await page.goto("/");
+  await page.goto("/?__trace_fixture=self-meeting");
   await page
-    .getByLabel("Describe the conversation")
+    .getByLabel("Describe something")
     .fill("我叫 Kai。Lina HR 约我明天下午两点面试。");
-  await page.getByText("Me + HR", { exact: true }).click();
   await page.getByRole("button", { name: "Analyze thread" }).click();
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
 
@@ -380,7 +411,7 @@ test("a failed meeting pass keeps confirmed contacts and can be revised", async 
 
 test("a successful analysis clears a stale offline health indicator", async ({ page }) => {
   await page.route("**/health", (route) => route.abort("connectionrefused"));
-  await page.goto("/");
+  await page.goto("/?__trace_fixture=meeting");
   await expect(page.getByText("Analyzer offline", { exact: true })).toBeVisible();
 
   await uploadScreenshot(page);
@@ -394,7 +425,12 @@ test("provider settings persist locally and can be cleared", async ({ page }) =>
   const localKey = "e2e-local-only-key";
 
   await page.goto("/");
-  await page.getByLabel("Provider settings").click();
+  await expect(page.getByText("Set provider", { exact: true })).toBeVisible();
+  await page.getByLabel("Describe something").fill("A provider is required for this thread.");
+  await page.getByRole("button", { name: "Analyze thread" }).click();
+  await expect(page.getByText("Vision provider", { exact: true })).toBeVisible();
+  await page.getByLabel("Choose vision provider").click();
+  await expect(page.getByLabel("Use Fixture")).toHaveCount(0);
   await page.getByLabel("Use DeepSeek").click();
   await page.getByLabel("Vision provider API key").fill(localKey);
   await page.getByLabel("Vision model").fill("deepseek-test-vision");
@@ -411,9 +447,10 @@ test("provider settings persist locally and can be cleared", async ({ page }) =>
   await page.reload();
   await expect(page.getByText("deepseek · deepseek-test-vision")).toBeVisible();
   await page.getByLabel("Provider settings").click();
+  await page.getByLabel("Choose vision provider").click();
   await page.getByLabel("Use Local default").click();
   await page.getByRole("button", { name: "Save provider" }).click();
-  await expect(page.getByText("fixture · trace-analyze-fixtures")).toBeVisible();
+  await expect(page.getByText("Set provider", { exact: true })).toBeVisible();
   const clearedStorage = await page.evaluate(() => JSON.stringify(localStorage));
   expect(clearedStorage).not.toContain(localKey);
 });

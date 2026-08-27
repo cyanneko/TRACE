@@ -18,7 +18,7 @@ export class NativeProviderSettingsRepository implements ProviderSettingsReposit
 
     try {
       const parsed = UserVisionProviderSchema.safeParse(JSON.parse(stored));
-      if (parsed.success) {
+      if (parsed.success && parsed.data.provider !== "fixture") {
         return parsed.data;
       }
     } catch {

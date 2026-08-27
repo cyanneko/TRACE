@@ -35,4 +35,13 @@ describe("WebProviderSettingsRepository", () => {
     await expect(repository.load()).resolves.toBeNull();
     expect(values.size).toBe(0);
   });
+
+  it("removes a legacy user-selected fixture provider", async () => {
+    installLocalStorage();
+    values.set("trace.vision-provider.v1", JSON.stringify({ provider: "fixture" }));
+    const repository = new WebProviderSettingsRepository();
+
+    await expect(repository.load()).resolves.toBeNull();
+    expect(values.size).toBe(0);
+  });
 });
