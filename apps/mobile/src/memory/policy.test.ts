@@ -22,7 +22,6 @@ const meeting: CreateMeetingCard = {
     timezone: "Asia/Shanghai",
     participantContactIds: ["contact-maya"],
     participantNames: ["Maya"],
-    notes: "Send the deck.",
   },
 };
 

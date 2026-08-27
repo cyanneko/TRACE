@@ -27,7 +27,6 @@ const contact: CreateContactCard = {
     jobTitle: "",
     phones: [],
     emails: [],
-    notes: "",
     isSelf: false,
     interactionSummary: "Maya replied directly.",
   },
@@ -49,7 +48,6 @@ const meeting: CreateMeetingCard = {
     timezone: "Asia/Shanghai",
     participantContactIds: [],
     participantNames: ["Maya"],
-    notes: "",
   },
 };
 
@@ -186,7 +184,7 @@ describe("action batch planning", () => {
         meetingId: "meeting-interview",
         displayTitle: "HR interview",
         participantNames: ["Me"],
-        changes: [{ field: "notes", previousValue: null, nextValue: "Bring portfolio." }],
+        changes: [{ field: "location", previousValue: null, nextValue: "Interview room" }],
       },
     };
     const existingMeeting: MeetingRecord = {

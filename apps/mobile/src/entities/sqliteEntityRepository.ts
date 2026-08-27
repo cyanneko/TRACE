@@ -14,6 +14,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 
 import { getTraceDatabase } from "../native/traceDatabase";
 import { deriveActionEntityEffects } from "./actionEffects";
+import { migrateEntityNotes } from "./entityNotesMigration";
 import { deriveGlobalMemoryEffects } from "./globalMemoryEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
@@ -40,6 +41,7 @@ import {
 } from "./types";
 
 const ENTITY_MIGRATION = "entity-memory-v2";
+const ENTITY_NOTES_MIGRATION = "entity-notes-to-dedicated-memory";
 
 type PayloadRow = {
   payload: string;
@@ -50,6 +52,16 @@ function parseRows<T>(rows: PayloadRow[], parse: (input: unknown) => { success: 
     try {
       const parsed = parse(JSON.parse(row.payload));
       return parsed.success && parsed.data ? [parsed.data] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function parseRawRows(rows: PayloadRow[]): unknown[] {
+  return rows.flatMap((row) => {
+    try {
+      return [JSON.parse(row.payload)];
     } catch {
       return [];
     }
@@ -107,7 +119,6 @@ export class SqliteEntityRepository implements EntityRepository {
         jobTitle: preserveExisting ? existing!.jobTitle : summary.jobTitle || undefined,
         phones: preserveExisting ? existing!.phones : summary.phones.filter(Boolean),
         emails: preserveExisting ? existing!.emails : summary.emails.filter(Boolean),
-        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
         isSelf: existing?.isSelf ?? false,
         status: "active" as const,
         source: existing?.source ?? source,
@@ -210,7 +221,6 @@ export class SqliteEntityRepository implements EntityRepository {
         allDay: preserveExisting ? existing!.allDay : summary.allDay,
         location: preserveExisting ? existing!.location : summary.location || undefined,
         meetingLink: preserveExisting ? existing!.meetingLink : summary.meetingLink || undefined,
-        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
         participantContactIds: preserveExisting ? existingParticipantContactIds : participantContactIds,
         status: "active",
         source: existing?.source ?? source,
@@ -392,22 +402,73 @@ export class SqliteEntityRepository implements EntityRepository {
       "SELECT name FROM schema_migrations WHERE name = ?",
       ENTITY_MIGRATION,
     );
-    if (existing) {
-      return;
+    if (!existing) {
+      const rows = await database.getAllAsync<PayloadRow>("SELECT payload FROM memory_entries");
+      const legacy = parseRows<MemoryEntry>(rows, (input) => MemoryEntrySchema.safeParse(input));
+      const migratedAt = this.factory.now();
+      const migrated = migrateLegacyMemories(legacy, { createId: this.factory.createId, migratedAt });
+
+      await database.withExclusiveTransactionAsync(async (transaction) => {
+        for (const contact of migrated.contacts) await this.writeContact(transaction, contact);
+        for (const meeting of migrated.meetings) await this.writeMeeting(transaction, meeting);
+        for (const memory of migrated.memories) await this.writeMemory(transaction, memory);
+        await transaction.runAsync(
+          "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)",
+          ENTITY_MIGRATION,
+          migratedAt,
+        );
+      });
     }
 
-    const rows = await database.getAllAsync<PayloadRow>("SELECT payload FROM memory_entries");
-    const legacy = parseRows<MemoryEntry>(rows, (input) => MemoryEntrySchema.safeParse(input));
+    await this.migrateStoredEntityNotes(database);
+  }
+
+  private async migrateStoredEntityNotes(database: SQLiteDatabase): Promise<void> {
+    const existing = await database.getFirstAsync<{ name: string }>(
+      "SELECT name FROM schema_migrations WHERE name = ?",
+      ENTITY_NOTES_MIGRATION,
+    );
+    if (existing) return;
+
+    const [contactRows, meetingRows, memoryRows] = await Promise.all([
+      database.getAllAsync<PayloadRow>("SELECT payload FROM contacts"),
+      database.getAllAsync<PayloadRow>("SELECT payload FROM meetings"),
+      database.getAllAsync<PayloadRow>("SELECT payload FROM entity_memories"),
+    ]);
+    const rawContacts = parseRawRows(contactRows);
+    const rawMeetings = parseRawRows(meetingRows);
+    const contacts = rawContacts.flatMap((input) => {
+      const parsed = ContactRecordSchema.safeParse(input);
+      return parsed.success ? [parsed.data] : [];
+    });
+    const meetings = rawMeetings.flatMap((input) => {
+      const parsed = MeetingRecordSchema.safeParse(input);
+      return parsed.success ? [parsed.data] : [];
+    });
+    const memories = parseRows(memoryRows, (input) => EntityMemorySchema.safeParse(input));
     const migratedAt = this.factory.now();
-    const migrated = migrateLegacyMemories(legacy, { createId: this.factory.createId, migratedAt });
+    const migrated = migrateEntityNotes(
+      { contacts: rawContacts, meetings: rawMeetings },
+      {
+        version: 2,
+        contacts,
+        meetings,
+        memories,
+        entityCommits: [],
+        globalMemoryCommits: [],
+      },
+      this.factory,
+    );
 
     await database.withExclusiveTransactionAsync(async (transaction) => {
-      for (const contact of migrated.contacts) await this.writeContact(transaction, contact);
-      for (const meeting of migrated.meetings) await this.writeMeeting(transaction, meeting);
-      for (const memory of migrated.memories) await this.writeMemory(transaction, memory);
+      if (migrated.changed) {
+        for (const contact of migrated.store.contacts) await this.writeContact(transaction, contact);
+        for (const meeting of migrated.store.meetings) await this.writeMeeting(transaction, meeting);
+        for (const memory of migrated.store.memories) await this.writeMemory(transaction, memory);
+      }
       await transaction.runAsync(
         "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)",
-        ENTITY_MIGRATION,
+        ENTITY_NOTES_MIGRATION,
         migratedAt,
       );
     });

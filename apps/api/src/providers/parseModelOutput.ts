@@ -120,7 +120,6 @@ function normalizeModelOutput(value: unknown): unknown {
       payload.endAt = normalizeTimestamp(payload.endAt);
       if (payload.participantContactIds === null) payload.participantContactIds = [];
       if (payload.participantNames === null) payload.participantNames = [];
-      if (payload.notes === null) payload.notes = "";
     }
 
     if (action.type === "create_contact") {
@@ -129,7 +128,6 @@ function normalizeModelOutput(value: unknown): unknown {
         "familyName",
         "company",
         "jobTitle",
-        "notes",
         "interactionSummary",
       ] as const) {
         if (payload[field] === null) payload[field] = "";

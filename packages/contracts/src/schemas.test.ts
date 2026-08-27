@@ -71,7 +71,6 @@ describe("ActionCardSchema", () => {
         timezone: "Asia/Shanghai",
         participantContactIds: ["contact-maya"],
         participantNames: ["Maya"],
-        notes: "Review the revised onboarding flow.",
       },
     });
 
@@ -121,7 +120,6 @@ describe("ActionCardSchema", () => {
         jobTitle: "",
         phones: [],
         emails: [],
-        notes: "",
       },
     });
 
@@ -153,7 +151,6 @@ describe("ActionCardSchema", () => {
           { field: "jobTitle", previousValue: null, nextValue: "Founder" },
           { field: "phones", previousValue: [], nextValue: ["+86 138 0000 0000"] },
           { field: "emails", previousValue: [], nextValue: ["kai@example.com"] },
-          { field: "notes", previousValue: null, nextValue: "Primary work contact." },
           { field: "isSelf", previousValue: false, nextValue: true },
         ],
       },
@@ -219,7 +216,6 @@ describe("AnalyzeModelOutputSchema", () => {
         jobTitle: "",
         phones: [],
         emails: [],
-        notes: "",
         isSelf: false,
         interactionSummary: "Direct conversation",
       },

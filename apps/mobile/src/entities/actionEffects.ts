@@ -61,7 +61,6 @@ function contactEffects(
       jobTitle: action.payload.jobTitle || undefined,
       phones: action.payload.phones,
       emails: action.payload.emails,
-      notes: action.payload.notes || undefined,
       isSelf: action.payload.isSelf,
       status: "active",
       source,
@@ -87,7 +86,6 @@ function contactEffects(
     jobTitle: existing?.jobTitle,
     phones: existing?.phones ?? [],
     emails: existing?.emails ?? [],
-    notes: existing?.notes,
     isSelf: existing?.isSelf ?? false,
     status: "active",
     source: existing?.source ?? source,
@@ -112,7 +110,6 @@ function contactEffects(
     if (change.field === "jobTitle") contact.jobTitle = change.nextValue?.trim() || undefined;
     if (change.field === "phones") contact.phones = [...change.nextValue];
     if (change.field === "emails") contact.emails = [...change.nextValue];
-    if (change.field === "notes") contact.notes = change.nextValue || undefined;
     if (change.field === "isSelf") contact.isSelf = change.nextValue;
   }
   return ContactRecordSchema.parse(contact);
@@ -137,7 +134,6 @@ function meetingEffects(
       endAt: action.payload.endAt ?? undefined,
       timezone: action.payload.timezone,
       allDay: false,
-      notes: action.payload.notes || undefined,
       participantContactIds: [
         ...new Set(
           action.payload.participantContactIds.map(
@@ -168,7 +164,6 @@ function meetingEffects(
     allDay: existing?.allDay ?? false,
     location: existing?.location,
     meetingLink: existing?.meetingLink,
-    notes: existing?.notes,
     participantContactIds: existing?.participantContactIds ?? [],
     status: "active",
     source: existing?.source ?? source,
@@ -183,7 +178,6 @@ function meetingEffects(
     if (change.field === "endAt") meeting.endAt = change.nextValue ?? undefined;
     if (change.field === "location") meeting.location = change.nextValue ?? undefined;
     if (change.field === "meetingLink") meeting.meetingLink = change.nextValue ?? undefined;
-    if (change.field === "notes") meeting.notes = change.nextValue ?? undefined;
     if (change.field === "allDay") meeting.allDay = change.nextValue;
     if (change.field === "participantContactIds") {
       meeting.participantContactIds = [

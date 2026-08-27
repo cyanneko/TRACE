@@ -62,7 +62,6 @@ export function deriveMemoryCandidates(input: DeriveInput): MemoryEntry[] {
             endAt: action.payload.endAt,
             timezone: action.payload.timezone,
             participantNames: action.payload.participantNames,
-            notes: action.payload.notes,
           },
         }),
       ];
@@ -81,7 +80,6 @@ export function deriveMemoryCandidates(input: DeriveInput): MemoryEntry[] {
             jobTitle: action.payload.jobTitle,
             phones: action.payload.phones,
             emails: action.payload.emails,
-            notes: action.payload.notes,
           },
         }),
       ];

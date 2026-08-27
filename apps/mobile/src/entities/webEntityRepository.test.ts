@@ -214,6 +214,63 @@ describe("WebEntityRepository", () => {
     ).resolves.toMatchObject({ skippedOperations: 0 });
   });
 
+  it("moves saved entity notes into dedicated memory exactly once", async () => {
+    const contactId = "10000000-0000-4000-8000-000000000011";
+    const meetingId = "10000000-0000-4000-8000-000000000012";
+    const timestamps = {
+      createdAt: "2026-08-20T03:30:00.000Z",
+      updatedAt: "2026-08-21T03:30:00.000Z",
+    };
+    const store = memoryStore({
+      [ENTITY_STORAGE_KEY]: JSON.stringify({
+        version: 2,
+        contacts: [
+          {
+            id: contactId,
+            displayName: "Maya Chen",
+            phones: [],
+            emails: [],
+            notes: "Prefers a concise pre-read.",
+            isSelf: false,
+            status: "active",
+            source: "trace",
+            ...timestamps,
+          },
+        ],
+        meetings: [
+          {
+            id: meetingId,
+            title: "Design review",
+            timezone: "Asia/Shanghai",
+            allDay: false,
+            notes: "Bring the final deck.",
+            participantContactIds: [contactId],
+            status: "active",
+            source: "trace",
+            ...timestamps,
+          },
+        ],
+        memories: [],
+        entityCommits: [],
+        globalMemoryCommits: [],
+      }),
+    });
+    const entities = repository(store);
+
+    await expect(entities.listAllMemories()).resolves.toEqual([
+      expect.objectContaining({ ownerType: "contact", ownerId: contactId, content: "Prefers a concise pre-read." }),
+      expect.objectContaining({ ownerType: "meeting", ownerId: meetingId, content: "Bring the final deck." }),
+    ]);
+    await expect(entities.listAllMemories()).resolves.toHaveLength(2);
+
+    const persisted = JSON.parse(store.getItem(ENTITY_STORAGE_KEY) ?? "{}") as {
+      contacts: Array<Record<string, unknown>>;
+      meetings: Array<Record<string, unknown>>;
+    };
+    expect(persisted.contacts[0]).not.toHaveProperty("notes");
+    expect(persisted.meetings[0]).not.toHaveProperty("notes");
+  });
+
   it("migrates legacy contact and meeting memory without deleting v1 data", async () => {
     const legacy: MemoryEntry[] = [
       {
@@ -273,8 +330,12 @@ describe("WebEntityRepository", () => {
     expect(contacts[0]).toMatchObject({ displayName: "Maya Chen", externalContactId: "native-maya" });
     expect(meetings).toHaveLength(1);
     expect(meetings[0]).toMatchObject({ title: "Design review", externalEventId: "native-event-review" });
-    expect(await entities.listMemories({ ownerType: "contact", ownerId: contacts[0]!.id })).toHaveLength(1);
-    expect(await entities.listMemories({ ownerType: "meeting", ownerId: meetings[0]!.id })).toHaveLength(1);
+    expect(await entities.listMemories({ ownerType: "contact", ownerId: contacts[0]!.id })).toEqual([
+      expect.objectContaining({ content: "Met through the design review." }),
+    ]);
+    expect(await entities.listMemories({ ownerType: "meeting", ownerId: meetings[0]!.id })).toEqual([
+      expect.objectContaining({ content: "Send the deck first." }),
+    ]);
     expect(store.getItem(LEGACY_MEMORY_STORAGE_KEY)).toBe(legacyJson);
   });
 
@@ -302,7 +363,6 @@ describe("WebEntityRepository", () => {
         timezone: "Asia/Shanghai",
         participantContactIds: [],
         participantNames: [],
-        notes: "Send the deck.",
       },
     };
     const input = {
@@ -347,7 +407,6 @@ describe("WebEntityRepository", () => {
         jobTitle: "",
         phones: [],
         emails: [],
-        notes: "",
         isSelf: true,
         interactionSummary: "",
       },
@@ -374,7 +433,7 @@ describe("WebEntityRepository", () => {
     expect(contacts.find((contact) => contact.isSelf)?.displayName).toBe("Kai");
   });
 
-  it("applies every contact update field without turning basic notes into memory", async () => {
+  it("applies every structured contact update field without creating free-text memory", async () => {
     const entities = repository(memoryStore());
     const draft = await entities.createContactDraft();
     await entities.saveContact({
@@ -405,7 +464,6 @@ describe("WebEntityRepository", () => {
           { field: "jobTitle", previousValue: null, nextValue: "Founder" },
           { field: "phones", previousValue: ["10086"], nextValue: ["+86 138 0000 0000"] },
           { field: "emails", previousValue: [], nextValue: ["kai@example.com"] },
-          { field: "notes", previousValue: null, nextValue: "Primary work contact." },
           { field: "isSelf", previousValue: false, nextValue: true },
         ],
       },
@@ -426,7 +484,6 @@ describe("WebEntityRepository", () => {
       jobTitle: "Founder",
       phones: ["+86 138 0000 0000"],
       emails: ["kai@example.com"],
-      notes: "Primary work contact.",
       isSelf: true,
     });
     await expect(entities.listMemories({ ownerType: "contact", ownerId: draft.id })).resolves.toEqual([]);
@@ -473,7 +530,6 @@ describe("WebEntityRepository", () => {
           { field: "allDay", previousValue: false, nextValue: true },
           { field: "location", previousValue: null, nextValue: "Room 8" },
           { field: "meetingLink", previousValue: null, nextValue: "https://example.com/review" },
-          { field: "notes", previousValue: null, nextValue: "Bring the final deck." },
           { field: "participantContactIds", previousValue: [], nextValue: [contact.id] },
         ],
       },
@@ -494,7 +550,6 @@ describe("WebEntityRepository", () => {
       allDay: true,
       location: "Room 8",
       meetingLink: "https://example.com/review",
-      notes: "Bring the final deck.",
       participantContactIds: [contact.id],
     });
   });
@@ -563,7 +618,6 @@ describe("WebEntityRepository", () => {
       allDay: false,
       location: "",
       meetingLink: "",
-      notes: "",
       participantContactIds: [sourceContact.id],
     };
 
@@ -628,7 +682,6 @@ describe("WebEntityRepository", () => {
           allDay: false,
           location: "",
           meetingLink: "",
-          notes: "",
           participantContactIds: [sourceContact.id],
         },
       ],

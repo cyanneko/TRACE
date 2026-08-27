@@ -116,7 +116,6 @@ export function migrateLegacyMemories(memories: MemoryEntry[], options: Migratio
           endAt: isoDate(value.endAt),
           timezone,
           allDay: false,
-          notes: text(value.notes) || undefined,
           participantContactIds: participant ? [participant.id] : [],
           status: title && timezone ? "active" : "draft",
           source: "trace",

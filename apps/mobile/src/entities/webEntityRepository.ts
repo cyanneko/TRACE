@@ -13,6 +13,7 @@ import {
 
 import { getDeviceKeyValueStore, type KeyValueStore } from "../storage/keyValueStore";
 import { deriveActionEntityEffects } from "./actionEffects";
+import { migrateEntityNotes } from "./entityNotesMigration";
 import { deriveGlobalMemoryEffects } from "./globalMemoryEffects";
 import { migrateLegacyMemories } from "./legacyMigration";
 import {
@@ -94,7 +95,6 @@ export class WebEntityRepository implements EntityRepository {
         jobTitle: preserveExisting ? existing!.jobTitle : summary.jobTitle || undefined,
         phones: preserveExisting ? existing!.phones : summary.phones.filter(Boolean),
         emails: preserveExisting ? existing!.emails : summary.emails.filter(Boolean),
-        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
         isSelf: existing?.isSelf ?? false,
         status: "active" as const,
         source: existing?.source ?? source,
@@ -179,7 +179,6 @@ export class WebEntityRepository implements EntityRepository {
         allDay: preserveExisting ? existing!.allDay : summary.allDay,
         location: preserveExisting ? existing!.location : summary.location || undefined,
         meetingLink: preserveExisting ? existing!.meetingLink : summary.meetingLink || undefined,
-        notes: preserveExisting ? existing!.notes : summary.notes || undefined,
         participantContactIds: preserveExisting ? existingParticipantContactIds : participantContactIds,
         status: "active",
         source: existing?.source ?? source,
@@ -337,11 +336,14 @@ export class WebEntityRepository implements EntityRepository {
   private read(): EntityStore {
     const serialized = this.store.getItem(ENTITY_STORAGE_KEY);
     if (serialized) {
-      const parsed = EntityStoreSchema.safeParse(JSON.parse(serialized));
+      const raw = JSON.parse(serialized);
+      const parsed = EntityStoreSchema.safeParse(raw);
       if (!parsed.success) {
         throw new Error("Saved TRACE entity data is invalid.");
       }
-      return parsed.data;
+      const migrated = migrateEntityNotes(raw, parsed.data, this.factory);
+      if (migrated.changed) this.write(migrated.store);
+      return migrated.store;
     }
 
     const migratedAt = this.factory.now();

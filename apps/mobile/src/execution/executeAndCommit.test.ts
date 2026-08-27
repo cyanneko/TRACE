@@ -29,7 +29,6 @@ const action: CreateContactCard = {
     jobTitle: "",
     phones: [],
     emails: [],
-    notes: "",
     isSelf: false,
     interactionSummary: "River asked to stay in touch.",
   },

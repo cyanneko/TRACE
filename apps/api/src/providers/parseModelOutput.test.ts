@@ -64,11 +64,11 @@ describe("parseAnalyzeOutputWithRepair", () => {
     if (action?.type !== "create_meeting") throw new Error("Expected a meeting action.");
     expect(action.payload).toMatchObject({
       endAt: "2026-08-27T07:30:00.000Z",
-      notes: "",
       participantContactIds: [],
       participantNames: [],
       startAt: "2026-08-27T07:00:00.000Z",
     });
+    expect(action.payload).not.toHaveProperty("notes");
     expect(action.memoryProposals).toEqual([]);
     expect(result.thread.participants).toEqual([]);
     expect(repair).not.toHaveBeenCalled();
@@ -118,9 +118,9 @@ describe("parseAnalyzeOutputWithRepair", () => {
       interactionSummary: "",
       isSelf: false,
       jobTitle: "",
-      notes: "",
       phones: [],
     });
+    expect(action.payload).not.toHaveProperty("notes");
   });
 
   it("normalizes legacy scalar phone and email contact changes into complete lists", async () => {

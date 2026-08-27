@@ -44,7 +44,6 @@ export class ExpoMeetingSource implements MeetingSource {
             allDay: event.allDay,
             location: event.location ?? "",
             meetingLink: event.url ?? "",
-            notes: event.notes ?? "",
             participantContactIds: [],
           },
         ];

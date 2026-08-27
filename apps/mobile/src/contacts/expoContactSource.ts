@@ -11,7 +11,6 @@ const summaryFields = [
   ContactField.JOB_TITLE,
   ContactField.PHONES,
   ContactField.EMAILS,
-  ContactField.NOTE,
 ] as const;
 
 export class ExpoContactSource implements ContactSource {
@@ -40,7 +39,6 @@ export class ExpoContactSource implements ContactSource {
           jobTitle: contact.jobTitle ?? "",
           phones: contact.phones.map((phone) => phone.number).filter((value): value is string => Boolean(value)),
           emails: contact.emails.map((email) => email.address).filter((value): value is string => Boolean(value)),
-          notes: contact.note ?? undefined,
         },
       ];
     });

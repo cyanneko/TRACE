@@ -77,17 +77,20 @@ function actionInsight(input: InsightRequest, action: ActionCard): Insight | nul
 
   if (action.type === "create_meeting") {
     const participants = action.payload.participantNames.join("、") || "对方";
-    const hasPreparation = action.payload.notes.trim().length > 0;
+    const dedicatedContext = action.memoryProposals.find(
+      (proposal) => proposal.target.type === "action_entity",
+    )?.content;
+    const hasDedicatedContext = Boolean(dedicatedContext);
     return {
-      title: hasPreparation ? "会前承诺比日历事件更值得跟进" : "会议已落地，目标仍需对齐",
-      body: hasPreparation
-        ? `${participants} 不只确认了时间，还留下了会前事项：“${action.payload.notes}”完成这项承诺会直接影响会议质量。`
+      title: hasDedicatedContext ? "会前承诺比日历事件更值得跟进" : "会议已落地，目标仍需对齐",
+      body: hasDedicatedContext
+        ? `${participants} 不只确认了时间，还留下了专属上下文：“${dedicatedContext}”落实这项信息会直接影响会议质量。`
         : `${participants} 已确认这次会议。当前上下文没有明确准备项，建议在会前补齐目标和预期产出。`,
       importance: "high",
       evidenceRefs,
       memoryRefs,
-      nextStep: hasPreparation ? "在会议开始前完成备注中的准备事项，并在完成后告知对方。" : "发送一句简短确认，补充会议目标。",
-      suggestedMessage: hasPreparation
+      nextStep: hasDedicatedContext ? "在会议开始前落实专属上下文中的事项，并在完成后告知对方。" : "发送一句简短确认，补充会议目标。",
+      suggestedMessage: hasDedicatedContext
         ? `${participants}，时间已经记下了。我会按约在会前准备好相关材料，到时见。`
         : `${participants}，时间已经记下了。为了让讨论更聚焦，我们会前再对齐一下目标。`,
     };

@@ -294,12 +294,6 @@ function ContactDetail({
               value={draft.emails.join("\n")}
             />
           </View>
-          <DetailField
-            label="Notes"
-            multiline
-            onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
-            value={draft.notes ?? ""}
-          />
           <View style={styles.toggleRow}>
             <View>
               <Text style={styles.toggleTitle}>This is me</Text>

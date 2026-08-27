@@ -163,12 +163,6 @@ function Fields({ card, contacts, meetings, onChange }: Pick<Props, "card" | "co
           }
           participantNames={card.payload.participantNames}
         />
-        <Field
-          label="Notes"
-          multiline
-          onChangeText={(notes) => onChange({ ...card, payload: { ...card.payload, notes } })}
-          value={card.payload.notes}
-        />
       </View>
     );
   }
@@ -235,8 +229,8 @@ function Fields({ card, contacts, meetings, onChange }: Pick<Props, "card" | "co
   return <UpdateContactFields card={card} contacts={contacts} onChange={onChange} />;
 }
 
-type ContactTextField = "displayName" | "givenName" | "familyName" | "company" | "jobTitle" | "notes";
-type MeetingTextField = "title" | "timezone" | "location" | "meetingLink" | "notes";
+type ContactTextField = "displayName" | "givenName" | "familyName" | "company" | "jobTitle";
+type MeetingTextField = "title" | "timezone" | "location" | "meetingLink";
 
 function sameValues(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
@@ -295,7 +289,6 @@ function UpdateContactFields({
   const jobTitleChange = findChange("jobTitle");
   const phonesChange = findChange("phones");
   const emailsChange = findChange("emails");
-  const notesChange = findChange("notes");
   const isSelfChange = findChange("isSelf");
 
   const previousDisplayName = existing?.displayName ??
@@ -313,8 +306,6 @@ function UpdateContactFields({
     (phonesChange?.field === "phones" ? phonesChange.previousValue : []);
   const previousEmails = existing?.emails ??
     (emailsChange?.field === "emails" ? emailsChange.previousValue : []);
-  const previousNotes = existing?.notes ??
-    (notesChange?.field === "notes" ? notesChange.previousValue : null) ?? "";
   const previousIsSelf = existing?.isSelf ??
     (isSelfChange?.field === "isSelf" ? isSelfChange.previousValue : false);
 
@@ -329,7 +320,6 @@ function UpdateContactFields({
   const jobTitle = jobTitleChange?.field === "jobTitle" ? jobTitleChange.nextValue ?? "" : previousJobTitle;
   const phones = phonesChange?.field === "phones" ? phonesChange.nextValue : previousPhones;
   const emails = emailsChange?.field === "emails" ? emailsChange.nextValue : previousEmails;
-  const notes = notesChange?.field === "notes" ? notesChange.nextValue ?? "" : previousNotes;
   const isSelf = isSelfChange?.field === "isSelf" ? isSelfChange.nextValue : previousIsSelf;
 
   const updateText = (field: ContactTextField, previousValue: string, nextValue: string) => {
@@ -384,7 +374,6 @@ function UpdateContactFields({
           value={emails.join("\n")}
         />
       </View>
-      <Field label="Notes" multiline onChangeText={(value) => updateText("notes", previousNotes, value)} value={notes} />
       <View style={styles.toggleRow}>
         <View>
           <Text style={styles.toggleTitle}>This is me</Text>
@@ -432,7 +421,6 @@ function UpdateMeetingFields({
   const allDayChange = findChange("allDay");
   const locationChange = findChange("location");
   const meetingLinkChange = findChange("meetingLink");
-  const notesChange = findChange("notes");
   const participantsChange = findChange("participantContactIds");
 
   const previousTitle = existing?.title ??
@@ -452,8 +440,6 @@ function UpdateMeetingFields({
     (locationChange?.field === "location" ? locationChange.previousValue : null) ?? "";
   const previousMeetingLink = existing?.meetingLink ??
     (meetingLinkChange?.field === "meetingLink" ? meetingLinkChange.previousValue : null) ?? "";
-  const previousNotes = existing?.notes ??
-    (notesChange?.field === "notes" ? notesChange.previousValue : null) ?? "";
   const previousParticipantIds = existing?.participantContactIds ??
     (participantsChange?.field === "participantContactIds" ? participantsChange.previousValue : []);
 
@@ -466,7 +452,6 @@ function UpdateMeetingFields({
   const meetingLink = meetingLinkChange?.field === "meetingLink"
     ? meetingLinkChange.nextValue ?? ""
     : previousMeetingLink;
-  const notes = notesChange?.field === "notes" ? notesChange.nextValue ?? "" : previousNotes;
   const participantContactIds = participantsChange?.field === "participantContactIds"
     ? participantsChange.nextValue
     : previousParticipantIds;
@@ -561,7 +546,6 @@ function UpdateMeetingFields({
         }}
         participantNames={card.payload.participantNames}
       />
-      <Field label="Notes" multiline onChangeText={(value) => updateText("notes", previousNotes, value)} value={notes} />
     </View>
   );
 }

@@ -57,7 +57,6 @@ export const CreateMeetingCardSchema = ActionCardBaseSchema.extend({
     timezone: NonEmptyStringSchema,
     participantContactIds: z.array(NonEmptyStringSchema).default([]),
     participantNames: z.array(NonEmptyStringSchema).default([]),
-    notes: z.string().default(""),
   }),
 });
 
@@ -71,7 +70,6 @@ export const CreateContactCardSchema = ActionCardBaseSchema.extend({
     jobTitle: z.string().default(""),
     phones: z.array(NonEmptyStringSchema).default([]),
     emails: z.array(z.email()).default([]),
-    notes: z.string().default(""),
     isSelf: z.boolean().default(false),
     interactionSummary: z.string().default(""),
   }),
@@ -79,7 +77,7 @@ export const CreateContactCardSchema = ActionCardBaseSchema.extend({
 
 const ContactTextChangeSchema = z
   .object({
-    field: z.enum(["displayName", "givenName", "familyName", "company", "jobTitle", "notes"]),
+    field: z.enum(["displayName", "givenName", "familyName", "company", "jobTitle"]),
     previousValue: z.string().nullable(),
     nextValue: z.string().nullable(),
   })
@@ -129,7 +127,7 @@ export const UpdateContactCardSchema = ActionCardBaseSchema.extend({
 
 const MeetingTextChangeSchema = z
   .object({
-    field: z.enum(["title", "timezone", "location", "meetingLink", "notes"]),
+    field: z.enum(["title", "timezone", "location", "meetingLink"]),
     previousValue: z.string().nullable(),
     nextValue: z.string().nullable(),
   })
@@ -264,7 +262,6 @@ export const ContactSummarySchema = z.object({
   jobTitle: z.string(),
   phones: z.array(z.string()),
   emails: z.array(z.string()),
-  notes: z.string().optional(),
   isSelf: z.boolean().optional(),
 });
 
@@ -280,7 +277,6 @@ export const ContactRecordSchema = z
     jobTitle: z.string().trim().max(500).optional(),
     phones: z.array(NonEmptyStringSchema),
     emails: z.array(z.email()),
-    notes: z.string().max(10_000).optional(),
     isSelf: z.boolean(),
     status: z.enum(["draft", "active"]),
     source: z.enum(["ios", "trace", "demo"]),
@@ -308,7 +304,6 @@ export const MeetingRecordSchema = z
     allDay: z.boolean(),
     location: z.string().trim().max(2_000).optional(),
     meetingLink: z.string().trim().max(2_048).optional(),
-    notes: z.string().max(10_000).optional(),
     participantContactIds: z.array(NonEmptyStringSchema),
     status: z.enum(["draft", "active"]),
     source: z.enum(["ios", "trace", "demo"]),
@@ -344,7 +339,6 @@ export const MeetingSummarySchema = z.object({
   allDay: z.boolean(),
   location: z.string().default(""),
   meetingLink: z.string().default(""),
-  notes: z.string().default(""),
   participantContactIds: z.array(NonEmptyStringSchema),
 });
 

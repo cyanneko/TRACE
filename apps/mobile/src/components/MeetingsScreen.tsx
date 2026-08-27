@@ -365,12 +365,6 @@ function MeetingDetail({
             onChangeText={(meetingLink) => setDraft((current) => ({ ...current, meetingLink }))}
             value={draft.meetingLink ?? ""}
           />
-          <DetailField
-            label="Notes"
-            multiline
-            onChangeText={(notes) => setDraft((current) => ({ ...current, notes }))}
-            value={draft.notes ?? ""}
-          />
         </View>
 
         <View style={styles.section}>

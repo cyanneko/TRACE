@@ -111,7 +111,6 @@ function ensureSelfContact(input: AnalyzeRequest, output: AnalyzeModelOutput): A
           jobTitle: "",
           phones: [],
           emails: [],
-          notes: "",
           isSelf: true,
           interactionSummary: `The user identifies themself as ${participant.displayName} in this thread.`,
         },

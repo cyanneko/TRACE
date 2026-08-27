@@ -15,7 +15,6 @@ export class DemoMeetingSource implements MeetingSource {
         allDay: false,
         location: "",
         meetingLink: "",
-        notes: "会前发送新版方案。",
         participantContactIds: ["contact-maya"],
       },
     ];

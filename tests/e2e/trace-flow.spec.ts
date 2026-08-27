@@ -26,7 +26,7 @@ async function uploadAndAnalyze(page: Page) {
   await expect(page.getByRole("button", { name: "Confirm meetings" })).toBeVisible();
 }
 
-test("contact update cards edit and persist the complete contact profile", async ({ page }) => {
+test("contact update cards edit and persist the complete structured contact profile", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?__trace_fixture=update-contact");
   await uploadScreenshot(page);
@@ -37,9 +37,9 @@ test("contact update cards edit and persist the complete contact profile", async
   await page.getByLabel("Family name").fill("Chen");
   await page.getByLabel("Phone numbers").fill("+86 138 0000 1208\n+86 139 0000 2208");
   await page.getByLabel("Email addresses").fill("maya@example.com\nmaya@northstar.example");
-  await page.getByLabel("Notes").fill("Use the Northstar work profile.");
+  await expect(page.getByLabel("Notes")).toHaveCount(0);
   await page.getByLabel("This contact is me: Maya Chen").click();
-  await expect(page.getByText("8 changed", { exact: true })).toBeVisible();
+  await expect(page.getByText("7 changed", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
 
   await page.getByRole("button", { name: "Confirm contacts and analyze meetings" }).click();
@@ -65,13 +65,13 @@ test("contact update cards edit and persist the complete contact profile", async
     familyName: "Chen",
     phones: ["+86 138 0000 1208", "+86 139 0000 2208"],
     emails: ["maya@example.com", "maya@northstar.example"],
-    notes: "Use the Northstar work profile.",
     isSelf: true,
   });
+  expect(stored.contact).not.toHaveProperty("notes");
   expect(stored.ownedMemoryCount).toBe(1);
 });
 
-test("meeting update cards persist rescheduled time and every meeting field", async ({ page }) => {
+test("meeting update cards persist rescheduled time and every structured meeting field", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/?__trace_fixture=update-meeting");
   await uploadScreenshot(page);
@@ -83,7 +83,7 @@ test("meeting update cards persist rescheduled time and every meeting field", as
   await page.getByLabel("All-day meeting: 与 Maya 的设计评审").click();
   await page.getByLabel("Location").fill("Room 8");
   await page.getByLabel("Meeting link").fill("https://example.com/review");
-  await page.getByLabel("Notes").fill("Bring the final deck.");
+  await expect(page.getByLabel("Notes")).toHaveCount(0);
   expect(await page.evaluate(() => document.body.scrollWidth)).toBe(390);
   await page.getByRole("button", { name: "Confirm meetings" }).click();
 
@@ -99,8 +99,8 @@ test("meeting update cards persist rescheduled time and every meeting field", as
     allDay: true,
     location: "Room 8",
     meetingLink: "https://example.com/review",
-    notes: "Bring the final deck.",
   });
+  expect(meeting).not.toHaveProperty("notes");
 });
 
 test("confirmed actions persist memory and inform the next thread", async ({ page }) => {

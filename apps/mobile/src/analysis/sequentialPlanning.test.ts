@@ -20,7 +20,6 @@ const contactCard: CreateContactCard = {
     jobTitle: "",
     phones: [],
     emails: [],
-    notes: "",
     isSelf: true,
     interactionSummary: "Kai introduced themself.",
   },
@@ -42,7 +41,6 @@ const meetingCard: CreateMeetingCard = {
     timezone: "Asia/Shanghai",
     participantContactIds: [],
     participantNames: ["Kai", "Lina"],
-    notes: "",
   },
 };
 

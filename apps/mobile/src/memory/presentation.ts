@@ -20,12 +20,10 @@ export function memoryTitle(memory: MemoryEntry): string {
 export function memoryDetail(memory: MemoryEntry): string {
   const value = memoryValue(memory);
   if (memory.type === "open_loop") {
-    const due = value.startAt ? `Starts ${String(value.startAt)}` : "Time unresolved";
-    const notes = value.notes ? ` · ${String(value.notes)}` : "";
-    return `${due}${notes}`;
+    return value.startAt ? `Starts ${String(value.startAt)}` : "Time unresolved";
   }
   if (memory.type === "relationship_fact") {
-    return [value.company, value.jobTitle, value.notes].filter(Boolean).map(String).join(" · ") || "Contact created";
+    return [value.company, value.jobTitle].filter(Boolean).map(String).join(" · ") || "Contact created";
   }
   return value.previousValue ? `Previously ${String(value.previousValue)}` : "Confirmed from this thread";
 }

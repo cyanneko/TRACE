@@ -10,7 +10,6 @@ function contactSummary(contact: ContactRecord): ContactSummary {
     jobTitle: contact.jobTitle ?? "",
     phones: contact.phones,
     emails: contact.emails,
-    notes: contact.notes,
     isSelf: contact.isSelf,
   };
 }
@@ -26,7 +25,6 @@ function meetingSummary(meeting: MeetingRecord): MeetingSummary {
     allDay: meeting.allDay,
     location: meeting.location ?? "",
     meetingLink: meeting.meetingLink ?? "",
-    notes: meeting.notes ?? "",
     participantContactIds: meeting.participantContactIds,
   };
 }
@@ -52,7 +50,6 @@ export function mergeContactContext(
       jobTitle: source.jobTitle || local.jobTitle || "",
       phones: source.phones.length > 0 ? source.phones : local.phones,
       emails: source.emails.length > 0 ? source.emails : local.emails,
-      notes: source.notes || local.notes,
       isSelf: local.isSelf || source.isSelf || undefined,
     };
   });

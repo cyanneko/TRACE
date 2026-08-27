@@ -85,7 +85,6 @@ describe("analysis entity context", () => {
           allDay: false,
           location: "",
           meetingLink: "",
-          notes: "",
           participantContactIds: [],
         },
       ],

@@ -89,7 +89,6 @@ export class ExpoActionExecutor implements ActionExecutor {
       startDate: new Date(action.payload.startAt),
       endDate: new Date(action.payload.endAt),
       timeZone: action.payload.timezone,
-      notes: action.payload.notes,
     });
     return {
       actionId: action.id,
@@ -110,7 +109,6 @@ export class ExpoActionExecutor implements ActionExecutor {
       familyName: action.payload.familyName,
       company: action.payload.company,
       jobTitle: action.payload.jobTitle,
-      note: action.payload.notes,
       phones: action.payload.phones.map((number) => ({ label: "mobile", number })),
       emails: action.payload.emails.map((address) => ({ label: "work", address })),
     });
@@ -166,7 +164,6 @@ export class ExpoActionExecutor implements ActionExecutor {
       if (change.field === "jobTitle") patch.jobTitle = change.nextValue || null;
       if (change.field === "givenName") patch.givenName = change.nextValue || null;
       if (change.field === "familyName") patch.familyName = change.nextValue || null;
-      if (change.field === "notes") patch.note = change.nextValue || null;
     }
 
     if (displayNameChange?.field === "displayName" && !givenNameChange && !familyNameChange) {
@@ -210,7 +207,6 @@ export class ExpoActionExecutor implements ActionExecutor {
       if (change.field === "timezone") patch.timeZone = change.nextValue!;
       if (change.field === "location") patch.location = change.nextValue;
       if (change.field === "meetingLink") patch.url = change.nextValue ?? "";
-      if (change.field === "notes") patch.notes = change.nextValue ?? "";
       if (change.field === "allDay") patch.allDay = change.nextValue;
       if (change.field === "startAt") {
         if (!change.nextValue) return failed(action.id, "A meeting start time cannot be cleared.");
